@@ -29,7 +29,7 @@ scene.add(light);
 // 6. Test cube
 const cube = new THREE.Mesh(
   new THREE.BoxGeometry(1, 1, 1),
-  new THREE.MeshStandardMaterial({ color: '#e8a33d' })
+  new THREE.MeshStandardMaterial({ color: '#3de87f' })
 );
 scene.add(cube);
 
