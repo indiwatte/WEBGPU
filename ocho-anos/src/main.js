@@ -53,15 +53,15 @@ console.log('WebGPU backend:', renderer.backend.isWebGPUBackend === true);
 
 
 //import 'three/webgpu'
-        ↓
+        
 //new WebGPURenderer()
-        ↓
+        
 //navigator.gpu exists ?
    //├─ yes → WebGPUBackend: requestAdapter → requestDevice → getContext('webgpu')
    //└─ no  → WebGLBackend: getContext('webgl2')
-        ↓
+        
 //renderer.render(scene, camera) every frame
-        ↓
+        
 //backend: TSL → WGSL, buffers, pipeline, commands, submit()
-        ↓
+//
 //GPU draws → you see it on screen
