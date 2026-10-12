@@ -7,7 +7,10 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { mix, vec3, uniform, texture, uv } from 'three/tsl';
 import { createFlameMaterial, flameUniforms } from './flame.js';
 import { createLiquidMaterial, liquidUniforms, setLiquidEnvironment } from './liquid.js';
+import { createStory } from './story.js';
+import { createTahonaDrag } from './tahona.js';
 import { applyMaterials } from './materials.js';
+import { addFlowAttribute, createCoilMaterial, coilUniforms } from './coil.js';
 
 // ---------- SCENE ----------
 const scene = new THREE.Scene();
@@ -117,6 +120,9 @@ document.body.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
+// scroll intro + story chapters (drives the camera)
+const story = createStory({ camera, controls });
+
 // ---------- LIGHTS ----------
 scene.add(new THREE.HemisphereLight('#ffd9c2', '#3b3a2a', 1.2)); // sky / ground
 const sun = new THREE.DirectionalLight('#ffb070', 3); // warm, low sun
@@ -131,6 +137,7 @@ scene.add(rim);
 
 
 const flameMaterial = createFlameMaterial({ flipY: false });
+const coilMaterial = createCoilMaterial();
 const liquidMaterial = createLiquidMaterial();
 
 // a Blender object with several materials loads as a Group of meshes,
@@ -213,6 +220,13 @@ loader.load(
       console.warn('❌ fire_plane NOT found, check the name in Blender');
     }
 
+    // coil fills with juice while grinding
+    const coil = machine.getObjectByName('coil');
+    if (coil) {
+      addFlowAttribute(coil.geometry);
+      coil.material = coilMaterial;
+    }
+
     // liquid
     const bottleLiquid = machine.getObjectByName('bottle_liquid');
     if (bottleLiquid) {
@@ -231,6 +245,15 @@ loader.load(
 
     frameModel(machine);
     buildGround();
+    story.setModel(machine);
+    createTahonaDrag({
+      camera, controls, canvas: renderer.domElement, machine,
+      onGrind: (turned, amount) => {
+        // about 10 full turns of the tahona fill the whole coil
+        coilUniforms.uFill.value = Math.min(coilUniforms.uFill.value + turned * 0.016, 1);
+        coilUniforms.uFlow.value = Math.max(coilUniforms.uFlow.value, amount);
+      },
+    });
   },
   undefined,
   (error) => console.error(`❌ Could not load ${MODEL_URL}`, error)
@@ -270,6 +293,7 @@ renderer.domElement.addEventListener('click', (event) => {
   while (obj && obj !== machine) {
     if (obj.name === 'tap') {
       console.log('🚰 tap clicked');
+      window.dispatchEvent(new CustomEvent('tap-clicked'));
       return;
     }
     obj = obj.parent;
@@ -297,12 +321,14 @@ window.addEventListener('pointermove', (e) => {
 // ---------- LOOP ----------
 renderer.setAnimationLoop(() => {
   controls.update();
+  story.update();
 
   // ease heat and wind
   const heat = flameUniforms.uHeat;
   heat.value += ((holding ? 1 : 0.4) - heat.value) * 0.05;
   const wind = flameUniforms.uWind;
   wind.value += (targetWind - wind.value) * 0.05;
+  coilUniforms.uFlow.value *= 0.92; // streaks fade when grinding stops
 
   // face the camera (Y axis only)
   if (firePlane) {

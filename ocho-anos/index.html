@@ -5,9 +5,57 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ocho-anos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Rye&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <div id="app"></div>
+    <!-- scroll intro -->
+    <section id="intro">
+      <div class="intro-stage">
+        <header class="hero">
+          <p class="eyebrow">Tequila 100% de agave · Jalisco, México</p>
+          <h1 class="hero-title">Rooster<br /><span>Rojo</span></h1>
+          <p class="hero-sub">From the foot of the Tequila volcano to your glass.</p>
+          <p class="scroll-hint">Scroll ↓</p>
+        </header>
+
+        <div class="origin panel">
+          <p class="eyebrow">Fábrica de Tequilas Finos</p>
+          <h2>Tequila, Jalisco</h2>
+          <p>
+            Rooster Rojo is made in the town of Tequila, in a colonial building from 1923.
+            Distilling started there in 2000, right at the foot of the Tequila volcano.
+          </p>
+        </div>
+
+        <div class="start-panel">
+          <p class="eyebrow">From agave to shot glass</p>
+          <h2>See how it's made</h2>
+          <button id="start" class="btn">Start the story</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- story UI -->
+    <div class="brand-bar">Rooster Rojo<span>Tequila 100% de agave</span></div>
+
+    <aside id="story" class="story">
+      <div class="story-content">
+        <p class="story-kicker"></p>
+        <h2 class="story-title"></h2>
+        <p class="story-text"></p>
+        <p class="story-hint"></p>
+      </div>
+      <nav class="story-nav">
+        <button class="nav-btn" id="prev" aria-label="Previous step">←</button>
+        <div class="dots"></div>
+        <button class="nav-btn nav-next" id="next">Next →</button>
+      </nav>
+    </aside>
+
+    <footer class="credit">School project · not affiliated with Rooster Rojo</footer>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
