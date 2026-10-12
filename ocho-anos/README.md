@@ -6,9 +6,12 @@ Built with Three.js (WebGPURenderer), TSL shaders, Rapier physics and my own Ble
 ## Live demo
 https://webgpu-gules.vercel.app/
 
+
 ## Original shader
-- Shadertoy: TBD
-- Author: TBD
+- Shadertoy: https://www.shadertoy.com/view/MdX3zr
+- Name: "Flame"
+- Author: XT95 (anatole duprat), 2013
+- License: CC BY-NC-SA 3.0. Used here for a non-commercial school project, ported from GLSL to Three.js TSL (WebGPU).
 
 ## Run locally
 ```bash
