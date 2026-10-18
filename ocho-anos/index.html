@@ -7,7 +7,7 @@
     <title>ocho-anos</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Rye&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=DM+Sans:wght@400;500;700&family=Josefin+Sans:wght@600&family=Rye&family=Special+Elite&display=swap" rel="stylesheet" />
   </head>
   <body>
     <!-- scroll intro -->
@@ -41,17 +41,53 @@
     <div class="brand-bar">Rooster Rojo<span>Tequila 100% de agave</span></div>
 
     <aside id="story" class="story">
-      <div class="story-content">
-        <p class="story-kicker"></p>
-        <h2 class="story-title"></h2>
-        <p class="story-text"></p>
-        <p class="story-hint"></p>
+      <div class="card-stack">
+        <!-- picture side: vintage greeting with the step's name -->
+        <div class="card card-front">
+          <div class="card-greeting">
+            <span class="greeting-small">¡Saludos desde</span>
+            <span class="greeting-big"></span>
+            <span class="greeting-place">Tequila, Jalisco!</span>
+          </div>
+        </div>
+
+        <!-- message side -->
+        <article class="card card-back">
+          <header class="postcard-head">
+            <h2 class="postcard-title story-title"></h2>
+            <div class="postmark"><span>Tequila · Jal.</span><b class="postmark-num"></b></div>
+            <div class="stamp" aria-hidden="true">
+              <svg viewBox="0 0 40 40">
+                <path d="M20 36 C19 26 17 16 20 4 C23 16 21 26 20 36Z" />
+                <path d="M19 36 C14 28 8 22 4 12 C12 18 16 26 19 36Z" />
+                <path d="M21 36 C26 28 32 22 36 12 C28 18 24 26 21 36Z" />
+                <path d="M18 36 C12 32 6 30 2 24 C9 26 14 30 18 36Z" />
+                <path d="M22 36 C28 32 34 30 38 24 C31 26 26 30 22 36Z" />
+              </svg>
+              <span class="stamp-country">México</span>
+              <b class="stamp-value">20</b>
+            </div>
+          </header>
+
+          <div class="postcard-body">
+            <div class="postcard-message">
+              <p class="story-kicker"></p>
+              <p class="story-text"></p>
+              <p class="story-hint"></p>
+            </div>
+            <figure class="postcard-photo">
+              <img alt="" />
+              <figcaption></figcaption>
+            </figure>
+          </div>
+
+          <nav class="story-nav">
+            <button class="nav-btn" id="prev" aria-label="Previous step">← anterior</button>
+            <div class="dots"></div>
+            <button class="nav-btn nav-next" id="next">siguiente →</button>
+          </nav>
+        </article>
       </div>
-      <nav class="story-nav">
-        <button class="nav-btn" id="prev" aria-label="Previous step">←</button>
-        <div class="dots"></div>
-        <button class="nav-btn nav-next" id="next">Next →</button>
-      </nav>
     </aside>
 
     <footer class="credit">School project · not affiliated with Rooster Rojo</footer>
