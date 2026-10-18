@@ -55,8 +55,8 @@ const CHAPTERS = [
     kicker: '¡Salud!',
     title: 'Ready to pour',
     text: 'From the agave field to the shot glass. Serve it with a slice of lime and enjoy it responsibly.',
-    hint: 'Click the tap to pour a round.',
-    parts: ['glass', 'lime', 'tap'],
+    hint: 'Turn the red tap handle to fill the empty glass, close it in time, then pull the machine handle down.',
+    parts: ['glass', 'lime', 'panel_shots', 'tap'],
     dir: [0.4, 0.5, 1],
     zoom: 1.5,
   },
@@ -116,12 +116,19 @@ export function createStory({ camera, controls }) {
     if (e.key === 'ArrowLeft') goTo(index - 1);
   });
 
-  window.addEventListener('tap-clicked', () => {
-    if (mode === 'story' && index === CHAPTERS.length - 1) {
-      el.hint.textContent = '¡Salud! 🥃';
-      gsap.fromTo(el.hint, { scale: 0.8 }, { scale: 1, duration: 0.5, ease: 'back.out(3)' });
-    }
-  });
+  // feedback from the shots machine in the last chapter
+  function lastHint(text) {
+    if (mode !== 'story' || index !== CHAPTERS.length - 1) return;
+    el.hint.textContent = text;
+    gsap.fromTo(el.hint, { scale: 0.8 }, { scale: 1, duration: 0.5, ease: 'back.out(3)' });
+  }
+  window.addEventListener('machine-start', () => lastHint('The light is on, warming up…'));
+  window.addEventListener('round-served', () => lastHint('¡Salud! 🥃 Pull the handle again for a fresh round.'));
+  window.addEventListener('shots-reset', () => lastHint('Fresh round! Pull the handle to send them off.'));
+  window.addEventListener('tap-full', () => lastHint('Full! Drag the tap handle back to close it.'));
+  window.addEventListener('tap-overflow', () => lastHint("It's overflowing! Close the tap!"));
+  window.addEventListener('tap-spill', () => lastHint("There's no glass under the tap, it's spilling!"));
+  window.addEventListener('tap-closed-full', () => lastHint('Perfect pour! Now pull the machine handle down.'));
 
   function start() {
     mode = 'story';

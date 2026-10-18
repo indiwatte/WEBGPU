@@ -9,6 +9,9 @@ import { createFlameMaterial, flameUniforms } from './flame.js';
 import { createLiquidMaterial, setLiquidEnvironment } from './liquid.js';
 import { createStory } from './story.js';
 import { createTahonaDrag } from './tahona.js';
+import { createShotMachine } from './machine.js';
+import { createTap } from './tap.js';
+import { createMiniBelt } from './minibelt.js';
 import { applyMaterials } from './materials.js';
 import { addFlowAttribute, createCoilMaterial, coilUniforms } from './coil.js';
 
@@ -157,6 +160,9 @@ function ownMeshes(obj) {
 const MODEL_URL = '/models/tequila.glb';
 let machine;
 let firePlane;
+let shotMachine;
+let tap;
+let miniBelt;
 
 // the export uses Draco compression, the decoder lives in public/draco
 const dracoLoader = new DRACOLoader();
@@ -251,14 +257,18 @@ loader.load(
     frameModel(machine);
     buildGround();
     story.setModel(machine);
+    miniBelt = createMiniBelt({ machine });
     createTahonaDrag({
       camera, controls, canvas: renderer.domElement, machine,
       onGrind: (turned, amount) => {
+        miniBelt.run(amount); // piñas roll from the oven into the mill while grinding
         // about 10 full turns of the tahona fill the whole coil
         coilUniforms.uFill.value = Math.min(coilUniforms.uFill.value + turned * 0.016, 1);
         coilUniforms.uFlow.value = Math.max(coilUniforms.uFlow.value, amount);
       },
     });
+    shotMachine = createShotMachine({ camera, controls, canvas: renderer.domElement, machine });
+    tap = createTap({ camera, controls, canvas: renderer.domElement, machine, scene, shotMachine });
   },
   undefined,
   (error) => console.error(`❌ Could not load ${MODEL_URL}`, error)
@@ -298,7 +308,6 @@ renderer.domElement.addEventListener('click', (event) => {
   while (obj && obj !== machine) {
     if (obj.name === 'tap') {
       console.log('🚰 tap clicked');
-      window.dispatchEvent(new CustomEvent('tap-clicked'));
       return;
     }
     obj = obj.parent;
@@ -324,9 +333,16 @@ window.addEventListener('pointermove', (e) => {
 });
 
 // ---------- LOOP ----------
+const timer = new THREE.Timer();
+
 renderer.setAnimationLoop(() => {
+  timer.update();
   controls.update();
   story.update();
+  const dt = timer.getDelta();
+  shotMachine?.update(dt, timer.getElapsed());
+  tap?.update(dt);
+  miniBelt?.update(dt);
 
   // ease heat and wind
   const heat = flameUniforms.uHeat;
