@@ -31,6 +31,160 @@ canvas {
   z-index: 0;
 }
 
+/* ---------- site header ---------- */
+.site-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  height: 72px;
+  box-sizing: border-box;
+  padding: 0 clamp(16px, 4vw, 56px) 0 clamp(120px, 14vw, 220px);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: clamp(16px, 2.4vw, 36px);
+  background: rgba(233, 211, 222, 0.88);
+  backdrop-filter: blur(8px);
+  color: #2b1c1c;
+}
+
+/* round logo hanging below the bar */
+.logo {
+  position: absolute;
+  top: 8px;
+  left: clamp(16px, 8vw, 120px);
+  width: 96px;
+  height: 96px;
+  transition: transform 0.25s;
+}
+
+.logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3)); /* follows the round shape, not a square */
+}
+
+.logo:hover {
+  transform: rotate(-6deg) scale(1.04);
+}
+
+.site-nav {
+  display: flex;
+  gap: clamp(14px, 2vw, 30px);
+}
+
+.site-nav a {
+  color: inherit;
+  font-family: 'Bitter', serif;
+  font-size: 1.02rem;
+  text-decoration: none;
+}
+
+.site-nav a:hover {
+  color: var(--red);
+}
+
+.buy-now {
+  padding: 8px 14px;
+  background: var(--red);
+  color: #fff3df;
+  font-family: 'Bitter', serif;
+  font-size: 1.02rem;
+  text-decoration: none;
+}
+
+.buy-now:hover {
+  background: #e8473c;
+}
+
+/* ---------- day / night switch ---------- */
+.mode-toggle {
+  position: relative;
+  flex: none;
+  width: 60px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgba(43, 28, 28, 0.2);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #c9b6e4, #f4b6c2 60%, #ffd3a5); /* the day sky */
+  cursor: pointer;
+  overflow: hidden;
+  transition: background 0.6s, border-color 0.6s;
+}
+
+/* a few stars that show at night */
+.mode-toggle::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(1.5px 1.5px at 14px 9px, #fff 99%, transparent),
+    radial-gradient(1px 1px at 22px 20px, #fff 99%, transparent),
+    radial-gradient(1px 1px at 9px 22px, #fff 99%, transparent);
+  opacity: 0;
+  transition: opacity 0.6s;
+}
+
+.mode-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff8ec;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: transform 0.6s cubic-bezier(0.65, 0, 0.35, 1), background 0.6s;
+}
+
+.mode-knob svg {
+  position: absolute;
+  inset: 4px;
+  width: 16px;
+  height: 16px;
+  transition: opacity 0.4s, transform 0.6s;
+}
+
+.icon-sun {
+  fill: #f2a24a;
+  stroke: #f2a24a;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.icon-moon {
+  fill: #c9b6e4;
+  opacity: 0;
+  transform: rotate(-60deg);
+}
+
+body.is-night .mode-toggle {
+  background: linear-gradient(180deg, #140f3d, #4b1f63 65%, #c4552d); /* the night sky */
+  border-color: rgba(246, 233, 220, 0.25);
+}
+
+body.is-night .mode-toggle::before { opacity: 1; }
+body.is-night .mode-knob { transform: translateX(28px); background: #f6e9dc; }
+body.is-night .icon-sun { opacity: 0; transform: rotate(90deg); }
+body.is-night .icon-moon { opacity: 1; transform: rotate(0); }
+
+/* the header follows the mode */
+.site-header {
+  transition: background 0.8s, color 0.8s;
+}
+
+body.is-night .site-header {
+  background: rgba(30, 18, 52, 0.85);
+  color: #f6e9dc;
+}
+
+body.is-night .site-nav a:hover {
+  color: #ff8a6a;
+}
+
 /* ---------- intro ---------- */
 #intro {
   position: relative;
@@ -46,13 +200,8 @@ canvas {
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: linear-gradient(
-    to bottom,
-    rgba(29, 19, 14, 0.55),
-    rgba(29, 19, 14, 0) 40%,
-    rgba(29, 19, 14, 0) 60%,
-    rgba(29, 19, 14, 0.6)
-  );
+  background: linear-gradient(90deg, rgba(60, 25, 35, 0.3), rgba(60, 25, 35, 0) 55%);
+  transition: background 0.8s;
 }
 
 .intro-stage > * {
@@ -69,23 +218,62 @@ canvas {
   opacity: 0.85;
 }
 
+.hero {
+  justify-self: start;
+  max-width: 620px;
+  padding: 72px 0 0 clamp(16px, 6vw, 110px);
+  text-align: left;
+}
+
 .hero-title {
   margin: 0;
-  font-family: 'Rye', serif;
-  font-weight: 400;
-  font-size: clamp(3.5rem, 12vw, 9rem);
-  line-height: 0.9;
-  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.35);
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 500;
+  font-size: clamp(3.2rem, 7.5vw, 6.6rem);
+  line-height: 0.95;
+  color: #fff8f2;
+  text-shadow: 0 4px 24px rgba(60, 20, 30, 0.25);
 }
 
-.hero-title span {
-  color: var(--red);
+.cactus {
+  display: inline-block;
+  width: 0.32em;
+  height: 0.55em;
+  margin-left: 0.08em;
+  fill: #5d7a4a;
+  vertical-align: baseline;
 }
 
-.hero-sub {
-  max-width: 32ch;
-  margin: 1.5rem auto 0;
-  font-size: clamp(1rem, 2.2vw, 1.3rem);
+.hero-text {
+  max-width: 34ch;
+  margin: 2.2rem 0 2.4rem;
+  font-family: 'Josefin Sans', sans-serif;
+  font-weight: 300;
+  font-size: clamp(1rem, 1.5vw, 1.25rem);
+  line-height: 1.45;
+  letter-spacing: 0.06em;
+  color: #fff8f2;
+}
+
+.read-more {
+  display: inline-block;
+  pointer-events: auto;
+  padding: 0.85rem 1.7rem;
+  border-radius: 12px;
+  background: #fff;
+  color: #111;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  text-decoration: none;
+  box-shadow: 0 6px 20px rgba(60, 20, 30, 0.25);
+  transition: transform 0.2s;
+}
+
+.read-more:hover {
+  transform: translateY(-2px);
 }
 
 .scroll-hint {
@@ -120,48 +308,7 @@ canvas {
   font-size: clamp(2rem, 5vw, 3.2rem);
 }
 
-.btn {
-  pointer-events: auto;
-  padding: 1rem 2.2rem;
-  border: 0;
-  border-radius: 999px;
-  background: var(--red);
-  color: var(--cream);
-  font: inherit;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  cursor: pointer;
-  box-shadow: 0 8px 24px rgba(216, 53, 43, 0.4);
-  transition: transform 0.2s, background 0.2s;
-}
-
-.btn:hover {
-  transform: translateY(-2px);
-  background: #e8473c;
-}
-
 /* ---------- story ---------- */
-.brand-bar {
-  position: fixed;
-  top: 20px;
-  left: 24px;
-  z-index: 2;
-  font-family: 'Rye', serif;
-  font-size: 1.4rem;
-  opacity: 0;
-  visibility: hidden;
-}
-
-.brand-bar span {
-  display: block;
-  font-family: 'DM Sans', sans-serif;
-  font-size: 0.7rem;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
-  opacity: 0.8;
-}
-
 .story {
   --paper: #f4ead8;
   --ink: #3b2a20;
@@ -477,8 +624,13 @@ canvas {
   pointer-events: none;
 }
 
+@media (max-width: 960px) {
+  .site-nav { display: none; }
+}
+
 @media (max-width: 600px) {
-  .brand-bar { top: 16px; left: 16px; }
+  .site-header { padding-left: 16px; }
+  .logo { width: 68px; height: 68px; left: 16px; }
   .story { left: 16px; bottom: 28px; }
   .postcard-body { grid-template-columns: 1fr 32%; gap: 10px; }
 }
@@ -486,4 +638,8 @@ canvas {
 /* short screens: shrink the cards so the scene stays visible */
 @media (max-height: 780px) {
   .story { transform: scale(0.82); }
+}
+
+body.is-night .intro-stage {
+  background: linear-gradient(90deg, rgba(10, 6, 30, 0.45), rgba(10, 6, 30, 0) 55%);
 }
