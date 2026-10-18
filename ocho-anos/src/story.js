@@ -5,6 +5,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 gsap.registerPlugin(ScrollTrigger);
 
 // parts = Blender names (without _01), dir = camera direction from the part, zoom = distance × part size
+// photo/caption = photo on the right of the postcard (steps without one use the full width for the message)
 const CHAPTERS = [
   {
     kicker: 'El agave',
@@ -30,6 +31,8 @@ const CHAPTERS = [
     text: 'The cooked agave is crushed to release its juice. Then a proprietary yeast is added and the juice ferments for up to 72 hours, a recipe kept by the master distiller.',
     hint: 'Drag the stone wheel (the tahona) and watch the juice fill the glass coil.',
     parts: ['mill', 'tahona_wheel', 'tahona_arm'],
+    photo: '/storycards/story-photo1.png',
+    caption: 'a tahona at work',
     dir: [-0.3, 0.7, 1],
     zoom: 1.9,
   },
@@ -39,6 +42,8 @@ const CHAPTERS = [
     text: 'The fermented juice is distilled two times in pot stills. Each run concentrates the aromas and makes the spirit cleaner and smoother.',
     hint: 'Follow the coil from the still to the bottle.',
     parts: ['still', 'coil'],
+    photo: '/storycards/story-photo2.png',
+    caption: 'a still, the horno behind',
     dir: [0.5, 0.35, 1],
     zoom: 1.7,
   },
@@ -55,8 +60,8 @@ const CHAPTERS = [
     kicker: '¡Salud!',
     title: 'Ready to pour',
     text: 'From the agave field to the shot glass. Serve it with a slice of lime and enjoy it responsibly.',
-    hint: 'Click the tap to pour a round.',
-    parts: ['glass', 'lime', 'tap'],
+    hint: 'Turn the red tap handle to fill the empty glass, close it in time, then pull the machine handle down.',
+    parts: ['glass', 'lime', 'panel_shots', 'tap'],
     dir: [0.4, 0.5, 1],
     zoom: 1.5,
   },
@@ -68,7 +73,12 @@ export function createStory({ camera, controls }) {
     start: document.querySelector('#start'),
     story: document.querySelector('#story'),
     brand: document.querySelector('.brand-bar'),
-    content: document.querySelector('.story-content'),
+    stack: document.querySelector('.card-stack'),
+    body: document.querySelector('.postcard-body'),
+    photo: document.querySelector('.postcard-photo img'),
+    caption: document.querySelector('.postcard-photo figcaption'),
+    greeting: document.querySelector('.greeting-big'),
+    postmark: document.querySelector('.postmark-num'),
     kicker: document.querySelector('.story-kicker'),
     title: document.querySelector('.story-title'),
     text: document.querySelector('.story-text'),
@@ -116,12 +126,19 @@ export function createStory({ camera, controls }) {
     if (e.key === 'ArrowLeft') goTo(index - 1);
   });
 
-  window.addEventListener('tap-clicked', () => {
-    if (mode === 'story' && index === CHAPTERS.length - 1) {
-      el.hint.textContent = '¡Salud! 🥃';
-      gsap.fromTo(el.hint, { scale: 0.8 }, { scale: 1, duration: 0.5, ease: 'back.out(3)' });
-    }
-  });
+  // feedback from the shots machine in the last chapter
+  function lastHint(text) {
+    if (mode !== 'story' || index !== CHAPTERS.length - 1) return;
+    el.hint.textContent = text;
+    gsap.fromTo(el.hint, { scale: 0.8 }, { scale: 1, duration: 0.5, ease: 'back.out(3)' });
+  }
+  window.addEventListener('machine-start', () => lastHint('The light is on, warming up…'));
+  window.addEventListener('round-served', () => lastHint('¡Salud! 🥃 Pull the handle again for a fresh round.'));
+  window.addEventListener('shots-reset', () => lastHint('Fresh round! Pull the handle to send them off.'));
+  window.addEventListener('tap-full', () => lastHint('Full! Drag the tap handle back to close it.'));
+  window.addEventListener('tap-overflow', () => lastHint("It's overflowing! Close the tap!"));
+  window.addEventListener('tap-spill', () => lastHint("There's no glass under the tap, it's spilling!"));
+  window.addEventListener('tap-closed-full', () => lastHint('Perfect pour! Now pull the machine handle down.'));
 
   function start() {
     mode = 'story';
@@ -144,24 +161,66 @@ export function createStory({ camera, controls }) {
     goTo(0);
   }
 
+  let cardsShown = false;
+
+  // swap the postcards: a copy of the old pair slides away on top like a turned page,
+  // while the real cards (already showing the new step) settle in underneath
+  function swapCards(fill, dir) {
+    if (!cardsShown) {
+      cardsShown = true;
+      fill();
+      gsap.fromTo(el.stack, { y: 60, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.7, ease: 'back.out(1.3)' });
+      return;
+    }
+
+    const old = el.stack.cloneNode(true);
+    old.classList.add('card-stack-leaving');
+    old.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
+    old.setAttribute('aria-hidden', 'true');
+    el.stack.after(old);
+    fill();
+
+    const [front, back] = old.querySelectorAll('.card');
+    gsap.timeline({ onComplete: () => old.remove() })
+      .to(back, {
+        x: -dir * 520, y: -60, rotation: `${-dir * 16}`, rotationY: -dir * 35, transformPerspective: 900,
+        autoAlpha: 0, duration: 0.75, ease: 'power2.inOut',
+      }, 0)
+      .to(front, {
+        x: -dir * 460, y: -120, rotation: `${-dir * 22}`, rotationY: -dir * 35, transformPerspective: 900,
+        autoAlpha: 0, duration: 0.75, ease: 'power2.inOut',
+      }, 0.08);
+
+    gsap.fromTo(el.stack,
+      { y: 14, scale: 0.97, autoAlpha: 0.4 },
+      { y: 0, scale: 1, autoAlpha: 1, duration: 0.6, delay: 0.1, ease: 'power2.out', overwrite: true });
+  }
+
   function goTo(i) {
-    index = THREE.MathUtils.clamp(i, 0, CHAPTERS.length - 1);
+    const nextIndex = THREE.MathUtils.clamp(i, 0, CHAPTERS.length - 1);
+    const dir = nextIndex >= index ? 1 : -1; // forward pages slide left, back slides right
+    index = nextIndex;
     const ch = CHAPTERS[index];
 
-    // text
-    gsap.timeline()
-      .to(el.content, { autoAlpha: 0, y: 10, duration: 0.2 })
-      .call(() => {
-        el.kicker.textContent = `${String(index + 1).padStart(2, '0')} / ${String(CHAPTERS.length).padStart(2, '0')} · ${ch.kicker}`;
-        el.title.textContent = ch.title;
-        el.text.textContent = ch.text;
-        el.hint.textContent = ch.hint;
-      })
-      .to(el.content, { autoAlpha: 1, y: 0, duration: 0.4 });
+    // postcards
+    const num = String(index + 1).padStart(2, '0');
+    swapCards(() => {
+      el.kicker.textContent = `Paso ${num} de ${String(CHAPTERS.length).padStart(2, '0')} · ${ch.kicker}`;
+      el.title.textContent = ch.title;
+      el.text.textContent = ch.text;
+      el.hint.textContent = ch.hint;
+      el.postmark.textContent = num;
+
+      el.greeting.textContent = ch.kicker;
+      el.body.classList.toggle('no-photo', !ch.photo);
+      if (ch.photo) el.photo.src = ch.photo;
+      el.photo.alt = ch.caption ?? '';
+      el.caption.textContent = ch.caption ?? '';
+    }, dir);
 
     [...el.dots.children].forEach((d, n) => d.classList.toggle('active', n === index));
     el.prev.disabled = index === 0;
-    el.next.textContent = index === CHAPTERS.length - 1 ? 'Restart ↺' : 'Next →';
+    el.next.textContent = index === CHAPTERS.length - 1 ? 'otra vez ↺' : 'siguiente →';
 
     // camera
     if (!machine) return;

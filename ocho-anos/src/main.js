@@ -6,9 +6,12 @@ import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { mix, vec3, uniform, texture, uv } from 'three/tsl';
 import { createFlameMaterial, flameUniforms } from './flame.js';
-import { createLiquidMaterial, liquidUniforms, setLiquidEnvironment } from './liquid.js';
+import { createLiquidMaterial, setLiquidEnvironment } from './liquid.js';
 import { createStory } from './story.js';
 import { createTahonaDrag } from './tahona.js';
+import { createShotMachine } from './machine.js';
+import { createTap } from './tap.js';
+import { createMiniBelt } from './minibelt.js';
 import { applyMaterials } from './materials.js';
 import { addFlowAttribute, createCoilMaterial, coilUniforms } from './coil.js';
 
@@ -138,7 +141,13 @@ scene.add(rim);
 
 const flameMaterial = createFlameMaterial({ flipY: false });
 const coilMaterial = createCoilMaterial();
-const liquidMaterial = createLiquidMaterial();
+// bottle: plain light-brown tequila filling the whole liquid body
+// (opaque on purpose, so it shows through the transmissive bottle glass)
+const bottleTequila = new THREE.MeshPhysicalNodeMaterial({
+  color: '#c8935a', roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.05,
+  sheen: 0.3, sheenColor: '#ffd9a0', // a warm glow at the edges
+});
+const shotLiquidMaterial = createLiquidMaterial({ upright: false, filled: true }); // shot glasses: wide, full of tequila
 
 // a Blender object with several materials loads as a Group of meshes,
 // this returns just those meshes (not the child objects parented to it)
@@ -151,6 +160,9 @@ function ownMeshes(obj) {
 const MODEL_URL = '/models/tequila.glb';
 let machine;
 let firePlane;
+let shotMachine;
+let tap;
+let miniBelt;
 
 // the export uses Draco compression, the decoder lives in public/draco
 const dracoLoader = new DRACOLoader();
@@ -172,14 +184,6 @@ loader.load(
 
     const oven = machine.getObjectByName('oven');
     const ovenMeshes = oven ? ownMeshes(oven) : [];
-
-    // see-through oven so the flame shows
-    for (const mesh of ovenMeshes) {
-      mesh.material = mesh.material.clone();
-      mesh.material.transparent = true;
-      mesh.material.opacity = 0.35;
-      mesh.material.depthWrite = false;
-    }
 
     // flame
     firePlane = machine.getObjectByName('fire_plane');
@@ -214,7 +218,7 @@ loader.load(
       }
 
       firePlane.material = flameMaterial;
-      firePlane.renderOrder = 1; // after the oven glass
+      firePlane.renderOrder = 1; // after the opaque scene, so the additive glow blends on top
       console.log('✅ fire_plane found');
     } else {
       console.warn('❌ fire_plane NOT found, check the name in Blender');
@@ -230,12 +234,19 @@ loader.load(
     // liquid
     const bottleLiquid = machine.getObjectByName('bottle_liquid');
     if (bottleLiquid) {
-      bottleLiquid.geometry.computeBoundingBox();
-      liquidUniforms.uHeight.value = bottleLiquid.geometry.boundingBox.max.y;
-      bottleLiquid.material = liquidMaterial;
+      bottleLiquid.material = bottleTequila;
       console.log('✅ bottle_liquid found');
     } else {
       console.warn('❌ bottle_liquid NOT found, check the name in Blender');
+    }
+
+    // tequila in the shot glasses, sized from the first one (they're all the same mesh size)
+    const shotLiquids = [1, 2, 3, 4].map((k) => machine.getObjectByName(`glass_liquid_0${k}`)).filter(Boolean);
+    if (shotLiquids.length) {
+      const box = (shotLiquids[0].geometry.computeBoundingBox(), shotLiquids[0].geometry.boundingBox);
+      shotLiquidMaterial.userData.uniforms.uHeight.value = box.max.y - box.min.y;
+      shotLiquidMaterial.userData.uniforms.uWidth.value = box.max.x - box.min.x;
+      shotLiquids.forEach((m) => (m.material = shotLiquidMaterial));
     }
 
     // everything casts a shadow except the shader planes/volumes
@@ -246,14 +257,18 @@ loader.load(
     frameModel(machine);
     buildGround();
     story.setModel(machine);
+    miniBelt = createMiniBelt({ machine });
     createTahonaDrag({
       camera, controls, canvas: renderer.domElement, machine,
       onGrind: (turned, amount) => {
+        miniBelt.run(amount); // piñas roll from the oven into the mill while grinding
         // about 10 full turns of the tahona fill the whole coil
         coilUniforms.uFill.value = Math.min(coilUniforms.uFill.value + turned * 0.016, 1);
         coilUniforms.uFlow.value = Math.max(coilUniforms.uFlow.value, amount);
       },
     });
+    shotMachine = createShotMachine({ camera, controls, canvas: renderer.domElement, machine });
+    tap = createTap({ camera, controls, canvas: renderer.domElement, machine, scene, shotMachine });
   },
   undefined,
   (error) => console.error(`❌ Could not load ${MODEL_URL}`, error)
@@ -293,7 +308,6 @@ renderer.domElement.addEventListener('click', (event) => {
   while (obj && obj !== machine) {
     if (obj.name === 'tap') {
       console.log('🚰 tap clicked');
-      window.dispatchEvent(new CustomEvent('tap-clicked'));
       return;
     }
     obj = obj.parent;
@@ -319,9 +333,16 @@ window.addEventListener('pointermove', (e) => {
 });
 
 // ---------- LOOP ----------
+const timer = new THREE.Timer();
+
 renderer.setAnimationLoop(() => {
+  timer.update();
   controls.update();
   story.update();
+  const dt = timer.getDelta();
+  shotMachine?.update(dt, timer.getElapsed());
+  tap?.update(dt);
+  miniBelt?.update(dt);
 
   // ease heat and wind
   const heat = flameUniforms.uHeat;

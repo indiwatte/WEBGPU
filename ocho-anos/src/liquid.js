@@ -1,4 +1,4 @@
-// Based on a Shadertoy glass-blob shader, ported to TSL and adapted to sit inside the bottle
+// Based on a Shadertoy glass-blob shader, ported to TSL and adapted to sit inside a container mesh
 
 import * as THREE from 'three/webgpu';
 import {
@@ -20,31 +20,15 @@ const EPS = 0.0001;
 const NORMAL_EPS = 0.01;  // smaller is noisy in 32-bit
 const MAX_DIST = 60.0;
 
-// ---------- UNIFORMS ----------
-export const liquidUniforms = {
-    uHeight: uniform(1),
-    uTint: uniform(new THREE.Color('#ffa24a')),
-};
-const { uHeight, uTint } = liquidUniforms;
-
-const SCALE = uHeight.div(55); // fit the scene in the bottle
-
 // reflections use the scene HDR, handed over from main.js once it has loaded
 let envMap = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1); // grey until then
 envMap.needsUpdate = true;
 const envNodes = [];
 
 export function setLiquidEnvironment(tex) {
-  envMap = tex;
-  envNodes.forEach((node) => (node.value = tex));
+    envMap = tex;
+    envNodes.forEach((node) => (node.value = tex));
 }
-
-// blob space → bottle space before sampling
-const environment = Fn(([dir]) => {
-  const node = texture(envMap, equirectUV(normalize(dir.yxz)));
-  envNodes.push(node);
-  return node.xyz;
-});
 
 // ---------- SDFs ----------
 // https://iquilezles.org/articles/smin
@@ -91,63 +75,94 @@ const PhongModel = Fn(([L, V, N]) => {
 });
 
 // ---------- MAIN ----------
-const liquidColor = Fn(() => {
-    // ray from the camera, in the mesh's local space
-    const camLocal = modelWorldMatrixInverse.mul(vec4(cameraPosition, 1)).xyz;
-    const dirLocal = normalize(positionLocal.sub(camLocal));
+// upright: lie the blob scene on its side so it fits a tall container (bottle);
+//          false keeps it wide (shot glass)
+// filled:  where the ray misses the blobs, show tequila instead of see-through
+function liquidColor({ upright, filled, uHeight, uWidth, uTint }) {
+    const swap = (v) => (upright ? v.yxz : v); // blob space ↔ container space (its own inverse)
 
-    // to blob space: swap x/y so it stands upright, center and scale
-    const centered = positionLocal.sub(vec3(0, uHeight.mul(0.5), 0));
-    const org = centered.yxz.div(SCALE).add(vec3(0, 8, 0));
-    const dir = dirLocal.yxz;
+    // the original scene is ~42 units long → shrink it to the container
+    const SCALE = upright ? uHeight.div(55) : uWidth.div(45);
 
-    // trace
-    const t = float(0).toVar();
-    const hit = float(0).toVar();
-    Loop(MAX_STEPS, () => {
-        const sd = CombineSDF(org.add(dir.mul(t))).toVar();
-        If(sd.lessThan(EPS), () => {
-            hit.assign(1);
-            Break();
-        });
-        t.addAssign(sd);
-        If(t.greaterThan(MAX_DIST), () => {
-            Break();
-        });
+    const environment = Fn(([dir]) => {
+        const node = texture(envMap, equirectUV(normalize(swap(dir))));
+        envNodes.push(node);
+        return node.xyz;
     });
 
-    If(hit.lessThan(0.5), () => {
-        Discard();
-    });
+    return Fn(() => {
+        // ray from the camera, in the mesh's local space
+        const camLocal = modelWorldMatrixInverse.mul(vec4(cameraPosition, 1)).xyz;
+        const dirLocal = normalize(positionLocal.sub(camLocal));
 
-    const hitAt = org.add(dir.mul(t));
-    const lDir = normalize(LIGHT_POS.sub(hitAt));
-    const N = GetNormal(hitAt);
-    const dCoeff = PhongModel(lDir, dir, N);
+        // to blob space: center, scale, (maybe) stand upright
+        const centered = positionLocal.sub(vec3(0, uHeight.mul(0.5), 0));
+        const org = swap(centered).div(SCALE).add(vec3(0, 8, 0));
+        const dir = swap(dirLocal);
 
-    // Schlick
-    const rZero = Math.pow((Ni1 - Ni2) / (Ni1 + Ni2), 2);
-    const cosTheta = dot(N, dir);
-    const reflWeight = pow(cosTheta.oneMinus(), 10).mul(1 - rZero).add(rZero)
-        .mul(dCoeff.y).mul(0.1);
+        // trace
+        const t = float(0).toVar();
+        const hit = float(0).toVar();
+        Loop(MAX_STEPS, () => {
+            const sd = CombineSDF(org.add(dir.mul(t))).toVar();
+            If(sd.lessThan(EPS), () => {
+                hit.assign(1);
+                Break();
+            });
+            t.addAssign(sd);
+            If(t.greaterThan(MAX_DIST), () => {
+                Break();
+            });
+        });
 
-    const reflCol = environment(reflect(dir, N));
-    const refrCol = environment(refract(dir, N, Ni1 / Ni2)).mul(uTint);
+        if (!filled) {
+            If(hit.lessThan(0.5), () => {
+                Discard();
+            });
+        }
 
-    const col = reflCol.mul(reflWeight).add(refrCol.mul(0.9)).mul(GLASS_CLARITY).toVar();
+        const hitAt = org.add(dir.mul(t));
+        const lDir = normalize(LIGHT_POS.sub(hitAt));
+        const N = GetNormal(hitAt);
+        const dCoeff = PhongModel(lDir, dir, N);
 
-    if (COLORS_ENABLED) {
-        const wave = hitAt.x.add(time.mul(2));
-        col.addAssign(vec3(cos(wave), 0, sin(wave)).mul(0.15).mul(reflWeight).mul(abs(sin(time.mul(0.15)))));
-    }
+        // Schlick
+        const rZero = Math.pow((Ni1 - Ni2) / (Ni1 + Ni2), 2);
+        const cosTheta = dot(N, dir);
+        const reflWeight = pow(cosTheta.oneMinus(), 10).mul(1 - rZero).add(rZero)
+            .mul(dCoeff.y).mul(0.1);
 
-    return col; // no gamma, three.js handles output
-});
+        const reflCol = environment(reflect(dir, N));
+        const refrCol = environment(refract(dir, N, Ni1 / Ni2)).mul(uTint);
+
+        const col = reflCol.mul(reflWeight).add(refrCol.mul(0.9)).mul(GLASS_CLARITY).toVar();
+
+        if (COLORS_ENABLED) {
+            const wave = hitAt.x.add(time.mul(2));
+            col.addAssign(vec3(cos(wave), 0, sin(wave)).mul(0.15).mul(reflWeight).mul(abs(sin(time.mul(0.15)))));
+        }
+
+        if (!filled) return col; // no gamma, three.js handles output
+
+        // the tequila itself: the scene seen through amber liquid, a bit darker than the blobs
+        const body = environment(dir).mul(uTint).mul(0.45).add(uTint.mul(0.08));
+        return mix(body, col, hit);
+    })();
+}
 
 // ---------- MATERIAL ----------
-export function createLiquidMaterial() {
+// returns the material; its uniforms are in material.userData.uniforms
+//   uHeight / uWidth: size of the container mesh (set from its bounding box)
+//   uTint: liquid color
+export function createLiquidMaterial({ upright = true, filled = false, tint = '#ffa24a' } = {}) {
+    const uniforms = {
+        uHeight: uniform(1),
+        uWidth: uniform(1),
+        uTint: uniform(new THREE.Color(tint)),
+    };
     const material = new THREE.MeshBasicNodeMaterial();
-    material.colorNode = liquidColor();
+    material.colorNode = liquidColor({ upright, filled, ...uniforms });
     material.side = THREE.FrontSide;
+    material.userData.uniforms = uniforms;
     return material;
 }

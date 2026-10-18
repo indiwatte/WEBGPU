@@ -108,9 +108,12 @@ export function createCoilMaterial() {
   const streak = sin(flow.mul(300).sub(time.mul(12))).mul(0.5).add(0.5);
   const juice = color('#e8a040').mul(streak.mul(uFlow).mul(0.5).add(1));
 
-  const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.05, transparent: true });
-  material.colorNode = mix(color('#eef4ff'), juice, filled);
-  material.opacityNode = mix(float(0.3), float(0.9), filled);
+  // real glass where it's empty (transmission refracts what's behind), juice where it's filled
+  const material = new THREE.MeshPhysicalNodeMaterial({
+    metalness: 0, roughness: 0.04, ior: 1.5, thickness: 0.03, clearcoat: 1, clearcoatRoughness: 0.02,
+  });
+  material.colorNode = mix(color('#ffffff'), juice, filled);
+  material.transmissionNode = mix(float(1), float(0.15), filled); // juice is mostly opaque
   material.emissiveNode = juice.mul(filled).mul(0.15); // a little glow
   return material;
 }
