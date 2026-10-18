@@ -6,7 +6,7 @@ import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { mix, vec3, uniform, texture, uv } from 'three/tsl';
 import { createFlameMaterial, flameUniforms } from './flame.js';
-import { createLiquidMaterial, liquidUniforms, setLiquidEnvironment } from './liquid.js';
+import { createLiquidMaterial, setLiquidEnvironment } from './liquid.js';
 import { createStory } from './story.js';
 import { createTahonaDrag } from './tahona.js';
 import { applyMaterials } from './materials.js';
@@ -138,7 +138,13 @@ scene.add(rim);
 
 const flameMaterial = createFlameMaterial({ flipY: false });
 const coilMaterial = createCoilMaterial();
-const liquidMaterial = createLiquidMaterial();
+// bottle: plain light-brown tequila filling the whole liquid body
+// (opaque on purpose, so it shows through the transmissive bottle glass)
+const bottleTequila = new THREE.MeshPhysicalNodeMaterial({
+  color: '#c8935a', roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.05,
+  sheen: 0.3, sheenColor: '#ffd9a0', // a warm glow at the edges
+});
+const shotLiquidMaterial = createLiquidMaterial({ upright: false, filled: true }); // shot glasses: wide, full of tequila
 
 // a Blender object with several materials loads as a Group of meshes,
 // this returns just those meshes (not the child objects parented to it)
@@ -173,14 +179,6 @@ loader.load(
     const oven = machine.getObjectByName('oven');
     const ovenMeshes = oven ? ownMeshes(oven) : [];
 
-    // see-through oven so the flame shows
-    for (const mesh of ovenMeshes) {
-      mesh.material = mesh.material.clone();
-      mesh.material.transparent = true;
-      mesh.material.opacity = 0.35;
-      mesh.material.depthWrite = false;
-    }
-
     // flame
     firePlane = machine.getObjectByName('fire_plane');
     if (firePlane) {
@@ -214,7 +212,7 @@ loader.load(
       }
 
       firePlane.material = flameMaterial;
-      firePlane.renderOrder = 1; // after the oven glass
+      firePlane.renderOrder = 1; // after the opaque scene, so the additive glow blends on top
       console.log('✅ fire_plane found');
     } else {
       console.warn('❌ fire_plane NOT found, check the name in Blender');
@@ -230,12 +228,19 @@ loader.load(
     // liquid
     const bottleLiquid = machine.getObjectByName('bottle_liquid');
     if (bottleLiquid) {
-      bottleLiquid.geometry.computeBoundingBox();
-      liquidUniforms.uHeight.value = bottleLiquid.geometry.boundingBox.max.y;
-      bottleLiquid.material = liquidMaterial;
+      bottleLiquid.material = bottleTequila;
       console.log('✅ bottle_liquid found');
     } else {
       console.warn('❌ bottle_liquid NOT found, check the name in Blender');
+    }
+
+    // tequila in the shot glasses, sized from the first one (they're all the same mesh size)
+    const shotLiquids = [1, 2, 3, 4].map((k) => machine.getObjectByName(`glass_liquid_0${k}`)).filter(Boolean);
+    if (shotLiquids.length) {
+      const box = (shotLiquids[0].geometry.computeBoundingBox(), shotLiquids[0].geometry.boundingBox);
+      shotLiquidMaterial.userData.uniforms.uHeight.value = box.max.y - box.min.y;
+      shotLiquidMaterial.userData.uniforms.uWidth.value = box.max.x - box.min.x;
+      shotLiquids.forEach((m) => (m.material = shotLiquidMaterial));
     }
 
     // everything casts a shadow except the shader planes/volumes

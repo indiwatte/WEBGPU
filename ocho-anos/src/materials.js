@@ -15,12 +15,6 @@ const LIBRARY = {
     color: '#ffffff', metalness: 0, roughness: 0.45, transmission: 1, thickness: 0.02, ior: 1.5,
   }),
 
-  // ---------- tequila in the shot glasses ----------
-  // opaque on purpose: transmissive objects don't show up behind other transmissive glass
-  'Material.008': () => tequila(),
-  'Material.012': () => tequila(),
-  'Material.001': () => tequila(),
-
   // ---------- metals ----------
   'Gold': () => new THREE.MeshPhysicalNodeMaterial({
     color: '#c8703f', metalness: 1, roughness: 0.25, clearcoat: 0.4, clearcoatRoughness: 0.1, // lacquered copper
@@ -53,12 +47,6 @@ const LIBRARY = {
   'eticket': () => new THREE.MeshStandardNodeMaterial({ color: '#c9302c', roughness: 0.5 }),
   'eticket.blue': () => new THREE.MeshStandardNodeMaterial({ color: '#2f8aa0', roughness: 0.5 }),
 };
-
-function tequila() {
-  return new THREE.MeshPhysicalNodeMaterial({
-    color: '#d98a45', roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.05,
-  });
-}
 
 // swap materials by name, one shared three.js material per Blender material
 export function applyMaterials(root) {
