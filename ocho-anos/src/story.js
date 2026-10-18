@@ -1,8 +1,11 @@
 import * as THREE from 'three/webgpu';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 
-gsap.registerPlugin(ScrollTrigger);
+gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
+
+const HERO_SHIFT = 0.22; // how far the machine sits to the right in the header (part of the screen width)
 
 // parts = Blender names (without _01), dir = camera direction from the part, zoom = distance × part size
 // photo/caption = photo on the right of the postcard (steps without one use the full width for the message)
@@ -70,9 +73,8 @@ const CHAPTERS = [
 export function createStory({ camera, controls }) {
   const el = {
     intro: document.querySelector('#intro'),
-    start: document.querySelector('#start'),
+    readMore: document.querySelector('#read-more'),
     story: document.querySelector('#story'),
-    brand: document.querySelector('.brand-bar'),
     stack: document.querySelector('.card-stack'),
     body: document.querySelector('.postcard-body'),
     photo: document.querySelector('.postcard-photo img'),
@@ -93,23 +95,36 @@ export function createStory({ camera, controls }) {
   let size = 1;
   let mode = 'intro';
   let index = 0;
-  const intro = { t: 0 }; // 0 = wide shot, 1 = hero framing
+  const intro = { t: 0 }; // 0 = website header, 1 = arrived at the machine
 
   controls.enabled = false; // so the wheel scrolls the page
 
   // ---------- INTRO ----------
-  gsap.from('.hero > *', { y: 40, opacity: 0, duration: 1, stagger: 0.12, ease: 'power3.out' });
+  // page load: the header drops in, then the hero text
+  gsap.from('.site-header', { y: -80, duration: 0.8, ease: 'power3.out' });
+  gsap.from('.hero > *', { y: 40, opacity: 0, duration: 1, stagger: 0.12, delay: 0.2, ease: 'power3.out' });
 
+  // scrolling: the header turns into the story, the camera travels to the machine
   const tl = gsap.timeline({
-    scrollTrigger: { trigger: el.intro, start: 'top top', end: 'bottom bottom', scrub: 1 },
+    scrollTrigger: {
+      trigger: el.intro,
+      start: 'top top',
+      end: 'bottom bottom',
+      scrub: 1,
+      onUpdate: (self) => self.progress > 0.995 && mode === 'intro' && start(), // end of the scroll → story
+    },
   });
   tl.to(intro, { t: 1, ease: 'none', duration: 1 }, 0)
-    .to('.hero', { opacity: 0, y: -80, duration: 0.25 }, 0.05)
+    .to('.hero', { opacity: 0, x: -80, duration: 0.25 }, 0.05)
     .fromTo('.origin', { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.2 }, 0.3)
     .to('.origin', { opacity: 0, y: -60, duration: 0.2 }, 0.6)
-    .fromTo('.start-panel', { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.15 }, 0.82);
+    .fromTo('.start-panel', { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.15 }, 0.8);
 
-  el.start.addEventListener('click', start);
+  // READ MORE glides all the way down into the story
+  el.readMore.addEventListener('click', (e) => {
+    e.preventDefault();
+    gsap.to(window, { scrollTo: { y: 'max' }, duration: 3, ease: 'power2.inOut' });
+  });
 
   // ---------- STORY ----------
   CHAPTERS.forEach(() => {
@@ -154,7 +169,9 @@ export function createStory({ camera, controls }) {
         window.scrollTo(0, 0);
       },
     });
-    gsap.to([el.story, el.brand], { autoAlpha: 1, duration: 0.6, delay: 0.4 });
+    gsap.killTweensOf(window); // stop a READ MORE scroll that's still running
+    gsap.to(el.story, { autoAlpha: 1, duration: 0.6, delay: 0.4 });
+    camera.clearViewOffset(); // the machine moves back to the middle
 
     controls.enabled = true;
     controls.enablePan = false;
@@ -259,12 +276,21 @@ export function createStory({ camera, controls }) {
     update() {
       if (mode !== 'intro' || !machine) return;
       const t = intro.t;
-      const angle = THREE.MathUtils.lerp(-1.1, 0.55, t);
-      const dist = size * THREE.MathUtils.lerp(2.0, 1.1, t);
-      const height = size * THREE.MathUtils.lerp(0.9, 0.35, t);
+      const e = t * t * (3 - 2 * t); // smoothstep, eases in and out
+
+      // header: low front view like the render → scrolling: swing a little and move in
+      const angle = THREE.MathUtils.lerp(0.18, -0.3, e);
+      const dist = size * THREE.MathUtils.lerp(0.95, 0.72, e);
+      const height = size * THREE.MathUtils.lerp(0.16, 0.38, e);
       camera.position.set(center.x + Math.sin(angle) * dist, center.y + height, center.z + Math.cos(angle) * dist);
       controls.target.copy(center);
       camera.lookAt(center);
+
+      // shift the picture so the machine sits on the right, next to the hero text
+      // (no shift on narrow screens, the text sits over the scene there)
+      const shift = (window.innerWidth > 800 ? HERO_SHIFT : 0) * (1 - e);
+      const w = window.innerWidth, h = window.innerHeight;
+      camera.setViewOffset(w, h, -shift * w, 0, w, h);
     },
   };
 }

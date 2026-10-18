@@ -7,18 +7,52 @@
     <title>ocho-anos</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=DM+Sans:wght@400;500;700&family=Josefin+Sans:wght@600&family=Rye&family=Special+Elite&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500&family=Caveat:wght@500;700&family=Cormorant+Garamond:wght@500;600&family=DM+Sans:wght@400;500;700&family=Josefin+Sans:wght@300;600&family=Rye&family=Special+Elite&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <!-- scroll intro -->
+    <!-- website header, stays on top -->
+    <header class="site-header">
+      <a class="logo" href="#" aria-label="Rooster Rojo home">
+        <img src="/logo.png" alt="logo of Rooster Rojo" />
+      </a>
+      <nav class="site-nav" aria-label="Main">
+        <a href="#">Products</a>
+        <a href="#">Cocktails</a>
+        <a href="#">About</a>
+        <a href="#">Latest news</a>
+        <a href="#">Community</a>
+        <a href="#">Contacts</a>
+      </nav>
+      <button class="mode-toggle" type="button" aria-pressed="false" aria-label="Switch to night">
+        <span class="mode-knob">
+          <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.5" />
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" />
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 14.6A8.5 8.5 0 0 1 9.4 4a8.5 8.5 0 1 0 10.6 10.6z" />
+          </svg>
+        </span>
+      </button>
+      <a class="buy-now" href="#">Buy now</a>
+    </header>
+
+    <!-- hero → scroll intro into the story -->
     <section id="intro">
       <div class="intro-stage">
-        <header class="hero">
-          <p class="eyebrow">Tequila 100% de agave · Jalisco, México</p>
-          <h1 class="hero-title">Rooster<br /><span>Rojo</span></h1>
-          <p class="hero-sub">From the foot of the Tequila volcano to your glass.</p>
-          <p class="scroll-hint">Scroll ↓</p>
-        </header>
+        <div class="hero">
+          <h1 class="hero-title">
+            Rooster Rojo<br />Tequila
+            <svg class="cactus" viewBox="0 0 24 40" aria-hidden="true">
+              <path d="M10 40V6a2 2 0 0 1 4 0v34z M10 22H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 4 0v6h2z M14 26h4a2 2 0 0 0 2-2v-9a2 2 0 0 0-4 0v7h-2z" />
+            </svg>
+          </h1>
+          <p class="hero-text">
+            At the foot of the Tequila volcano, in the town of Tequila, Mexico, you'll find a rooster.
+            And not just any rooster: a tequila made from 100% blue Weber agave.
+          </p>
+          <a href="#" class="read-more" id="read-more">Read more</a>
+        </div>
 
         <div class="origin panel">
           <p class="eyebrow">Fábrica de Tequilas Finos</p>
@@ -31,14 +65,11 @@
 
         <div class="start-panel">
           <p class="eyebrow">From agave to shot glass</p>
-          <h2>See how it's made</h2>
-          <button id="start" class="btn">Start the story</button>
+          <h2>Step inside the machine</h2>
+          <p class="scroll-hint">Keep scrolling ↓</p>
         </div>
       </div>
     </section>
-
-    <!-- story UI -->
-    <div class="brand-bar">Rooster Rojo<span>Tequila 100% de agave</span></div>
 
     <aside id="story" class="story">
       <div class="card-stack">

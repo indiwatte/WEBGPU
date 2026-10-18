@@ -2,9 +2,7 @@ import './style.css';
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { mix, vec3, uniform, texture, uv } from 'three/tsl';
 import { createFlameMaterial, flameUniforms } from './flame.js';
 import { createLiquidMaterial, setLiquidEnvironment } from './liquid.js';
 import { createStory } from './story.js';
@@ -14,88 +12,25 @@ import { createTap } from './tap.js';
 import { createMiniBelt } from './minibelt.js';
 import { applyMaterials } from './materials.js';
 import { addFlowAttribute, createCoilMaterial, coilUniforms } from './coil.js';
+import { createDayNight } from './daynight.js';
 
 // ---------- SCENE ----------
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#1a1a1a'); // until the HDR loads
+// sky, floor and reflections come from daynight.js (pastel sunset ↔ desert night)
 
-// sky tint
-const skyTint = uniform(new THREE.Color('#ff9a4d'));
-const skyTintStrength = uniform(0.6); // 0 = original, 1 = full tint
-
-// HDR used for background + lighting/reflections
-let hdr;
-new EXRLoader().load(
-  '/desert.exr',
-  (tex) => {
-    tex.mapping = THREE.EquirectangularReflectionMapping; // HDR is linear, no sRGB
-    scene.background = tex; // until the ground is built
-    scene.environment = tex;
-    scene.environmentIntensity = 0.8;
-    hdr = tex;
-    setLiquidEnvironment(tex);
-    buildGround();
-  },
-  undefined,
-  (error) => console.error('❌ Could not load the HDR background', error)
-);
-
-// sphere whose bottom half is flattened into a floor at y = -height,
-// so the HDR looks like real ground (same idea as three's GroundedSkybox)
-function createGroundedSkybox(map, height, radius, resolution = 128) {
-  const geometry = new THREE.SphereGeometry(radius, 2 * resolution, resolution);
-  geometry.scale(1, 1, -1); // render the inside
-
-  const pos = geometry.getAttribute('position');
-  const tmp = new THREE.Vector3();
-  const y1 = -height * 1.5;
-  for (let i = 0; i < pos.count; i++) {
-    tmp.fromBufferAttribute(pos, i);
-    if (tmp.y < 0) {
-      // flat floor, smooth bend up into the sky
-      const f = tmp.y < y1 ? -height / tmp.y : 1 - (tmp.y * tmp.y) / (3 * y1 * y1);
-      tmp.multiplyScalar(f);
-      tmp.toArray(pos.array, 3 * i);
-    }
-  }
-
-  const material = new THREE.MeshBasicNodeMaterial({ depthWrite: false });
-  // x1.6 so the tint warms the sky instead of darkening it
-  material.colorNode = texture(map, uv()).rgb.mul(mix(vec3(1), skyTint.mul(1.6), skyTintStrength));
-  return new THREE.Mesh(geometry, material);
-}
-
-// needs both the HDR and the model, runs after whichever loads last
+// needs the model: sand floor under it, sun aimed at it with a fitted shadow camera
 function buildGround() {
-  if (!hdr || !machine) return;
-
   const box = new THREE.Box3().setFromObject(machine);
   const size = box.getSize(new THREE.Vector3()).length();
   const center = box.getCenter(new THREE.Vector3());
-  const groundY = box.min.y;
 
-  // height = how high the photo's camera was; lower → ground feels closer
-  const height = size * 0.6;
-  const skybox = createGroundedSkybox(hdr, height, size * 6);
-  skybox.position.set(center.x, groundY + height, center.z);
-  skybox.renderOrder = -1;
-  scene.add(skybox);
-  scene.background = null;
+  dayNight.addGround({ center, size, y: box.min.y });
 
-  // invisible floor that only shows shadows
-  const shadowCatcher = new THREE.Mesh(
-    new THREE.PlaneGeometry(size * 3, size * 3),
-    new THREE.ShadowNodeMaterial({ opacity: 0.45 })
-  );
-  shadowCatcher.rotation.x = -Math.PI / 2;
-  shadowCatcher.position.set(center.x, groundY + size * 0.001, center.z);
-  shadowCatcher.receiveShadow = true;
-  scene.add(shadowCatcher);
-
-  // aim the sun at the model and fit the shadow camera around it
   sun.target.position.copy(center);
   scene.add(sun.target);
-  sun.position.copy(center).add(new THREE.Vector3(-4, 3, 4).normalize().multiplyScalar(size * 1.5));
+  const sunDir = new THREE.Vector3(-4, 3, 4).normalize();
+  sun.position.copy(center).addScaledVector(sunDir, size * 1.5);
+  dayNight.setSunDirection(sunDir);
   const cam = sun.shadow.camera;
   cam.left = -size * 0.75;
   cam.right = size * 0.75;
@@ -127,7 +62,8 @@ controls.enableDamping = true;
 const story = createStory({ camera, controls });
 
 // ---------- LIGHTS ----------
-scene.add(new THREE.HemisphereLight('#ffd9c2', '#3b3a2a', 1.2)); // sky / ground
+const hemi = new THREE.HemisphereLight('#ffd9c2', '#3b3a2a', 1.2); // sky / ground
+scene.add(hemi);
 const sun = new THREE.DirectionalLight('#ffb070', 3); // warm, low sun
 sun.position.set(-4, 3, 4);
 sun.castShadow = true;
@@ -137,6 +73,11 @@ scene.add(sun);
 const rim = new THREE.DirectionalLight('#9db8ff', 0.8); // cool back light
 rim.position.set(4, 4, -5);
 scene.add(rim);
+
+// ---------- DAY / NIGHT ----------
+// colors of the sky, floor, lights and reflections; the switch sits in the header
+const dayNight = createDayNight({ scene, renderer, hemi, sun, rim, toggle: document.querySelector('.mode-toggle') });
+setLiquidEnvironment(dayNight.envMap); // the liquid shaders refract the same sky
 
 
 const flameMaterial = createFlameMaterial({ flipY: false });
