@@ -3,6 +3,8 @@ import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { pass } from 'three/tsl';
 import { createFlameMaterial, flameUniforms } from './flame.js';
 import { createLiquidMaterial, setLiquidEnvironment } from './liquid.js';
 import { createStory } from './story.js';
@@ -10,7 +12,7 @@ import { createTahonaDrag } from './tahona.js';
 import { createShotMachine } from './machine.js';
 import { createTap } from './tap.js';
 import { createMiniBelt } from './minibelt.js';
-import { applyMaterials } from './materials.js';
+import { applyMaterials, neonGlow } from './materials.js';
 import { addFlowAttribute, createCoilMaterial, coilUniforms } from './coil.js';
 import { createDayNight } from './daynight.js';
 
@@ -79,6 +81,21 @@ scene.add(rim);
 // ---------- DAY / NIGHT ----------
 // colors of the sky, floor, lights and reflections; the switch sits in the header
 const dayNight = createDayNight({ scene, renderer, hemi, sun, rim, toggle: document.querySelector('.mode-toggle') });
+
+// ---------- BLOOM ----------
+// the scene is rendered into a texture first; everything brighter than the threshold (neon, flame,
+// machine light, sun) gets blurred and added back on top, so it glows
+const pipeline = new THREE.RenderPipeline(renderer);
+const scenePass = pass(scene, camera);
+const sceneColor = scenePass.getTextureNode('output');
+const glow = bloom(sceneColor, 0.4, 0.3, 0.9); // strength, radius, threshold
+pipeline.outputNode = sceneColor.add(glow);
+
+// at night the neon shines brighter and the glow spreads more
+dayNight.onChange((t) => {
+  neonGlow.value = THREE.MathUtils.lerp(1, 2.5, t);
+  glow.strength.value = THREE.MathUtils.lerp(0.4, 0.9, t);
+});
 setLiquidEnvironment(dayNight.envMap); // the liquid shaders refract the same sky
 dayNight.setSunDirection(SUN_DIRECTION); // the background shader's light matches the sun light
 
@@ -101,7 +118,7 @@ function ownMeshes(obj) {
 }
 
 // ---------- LOAD THE MODEL ----------
-const MODEL_URL = '/models/tequila.glb';
+const MODEL_URL = '/models/tequila_baked.glb';
 let machine;
 let firePlane;
 let shotMachine;
@@ -300,7 +317,7 @@ renderer.setAnimationLoop(() => {
   if (firePlane) {
     firePlane.rotation.y = Math.atan2(camera.position.x - firePlane.position.x, camera.position.z - firePlane.position.z);
   }
-  renderer.render(scene, camera);
+  pipeline.render(); // scene + bloom (instead of renderer.render)
 });
 
 renderer.init().then(() => {
