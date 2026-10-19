@@ -1,2 +1,7 @@
 .DS_Store
 **/.DS_Store
+
+# dependencies and build output (npm install / npm run build recreate them)
+node_modules/
+dist/
+.vite/
