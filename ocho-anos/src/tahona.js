@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { music } from './music.js';
 
 // drag the tahona wheel around the mill: the arm swings around its origin (center of the basin)
 // and the wheel (child of the arm) rolls on its axle
@@ -118,6 +119,7 @@ export function createTahonaDrag({ camera, controls, canvas, machine, onGrind })
     const amount = Math.min(speed / 3, 1);
     setGrind(amount);
     onGrind?.(Math.abs(delta), amount);
+    music.activity();
 
     // mouse held still → fade out
     clearTimeout(stillTimer);

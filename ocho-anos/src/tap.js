@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { uv, time, sin, mix, color } from 'three/tsl';
+import { music } from './music.js';
 
-const SNAP_GLASS_UNDER_TAP = true; // set false once a glass stands under the spout in Blender
 const OPEN_MAX = Math.PI / 2;      // handle turned a quarter = fully open
 const FLOW_RATE = 0.35;            // fill per second at full open (1 = Blender's level)
 const GRAVITY = 9.8;
@@ -60,13 +60,8 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
   tap.updateMatrixWorld(true);
   tap.localToWorld(spout.copy(spoutLocal));
 
-  if (SNAP_GLASS_UNDER_TAP) {
-    const shot = shotMachine.placeUnder(spout.x, spout.z);
-    if (shot) {
-      shot.startsEmpty = true;
-      shotMachine.setFill(shot, 0);
-    }
-  }
+  // the filling line puts its first slot right under the spout
+  shotMachine.setStation(spout.x, spout.z);
 
   // ---------- STREAM ----------
   // open cylinder hanging down from y = 0, scaled to the right length every frame
@@ -193,7 +188,8 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
   canvas.addEventListener('pointercancel', stopDrag);
 
   // ---------- STORY FEEDBACK ----------
-  let told = ''; // only send each message once per pour
+  let told = '';         // only send each message once per pour
+  let pouredInto = null; // the glass that was filled during this pour
   function tell(name) {
     if (told === name) return;
     told = name;
@@ -232,6 +228,7 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
       const flow = pouring ? FLOW_RATE * open * dt : 0;
       let spilling = 0; // fill units per frame going over the edge or onto the table
       if (pouring && shot) {
+        pouredInto = shot;
         shotMachine.setFill(shot, shot.fill + flow);
         if (shot.fill >= shot.maxFill) {
           spilling = flow;
@@ -242,8 +239,12 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
       } else if (pouring) {
         spilling = flow;
         tell('tap-spill');
-      } else if (told) {
-        if (told === 'tap-full') window.dispatchEvent(new CustomEvent('tap-closed-full'));
+      } else if (!pouring && pouredInto) {
+        // tap closed after pouring into a glass: full (even if it overflowed) or not yet
+        window.dispatchEvent(new CustomEvent(pouredInto.fill >= 1 ? 'tap-closed-full' : 'tap-closed-short'));
+        pouredInto = null;
+        told = '';
+      } else if (!pouring) {
         told = '';
       }
 
@@ -281,6 +282,7 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
 
       // sound: louder with the flow, higher as the glass fills up (like a real glass)
       pour.set(pouring ? open : 0, shot ? Math.min(shot.fill / shot.maxFill, 1) : 0.2);
+      music.setPour(pouring ? open : 0, spilling > 0); // the soundtrack gets louder while pouring
     },
   };
 }

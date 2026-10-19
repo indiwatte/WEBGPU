@@ -15,6 +15,8 @@ import { createMiniBelt } from './minibelt.js';
 import { applyMaterials, neonGlow } from './materials.js';
 import { addFlowAttribute, createCoilMaterial, coilUniforms } from './coil.js';
 import { createDayNight } from './daynight.js';
+import { createFire } from './fire.js';
+import { music } from './music.js';
 
 // ---------- SCENE ----------
 const scene = new THREE.Scene();
@@ -122,6 +124,8 @@ const MODEL_URL = '/models/tequila_baked.glb';
 let machine;
 let firePlane;
 let shotMachine;
+let fire;
+let fireBase; // flame plane size/position at size 1, for fire.js
 let tap;
 let miniBelt;
 
@@ -169,7 +173,8 @@ loader.load(
         const ovenCenter = ovenBox.getCenter(new THREE.Vector3());
         const width = ovenSize.x * 1.05;
         const height = ovenSize.y * 1.8;
-        const bottom = ovenBox.min.y + ovenSize.y * 0.15;
+        const bottom = ovenBox.min.y + ovenSize.y * 0.7; // low enough to start inside, high enough that a small fire still peeks out
+        fireBase = { width, height, bottom, center: ovenCenter };
 
         firePlane.position.set(ovenCenter.x, bottom + height / 2, ovenCenter.z);
         firePlane.scale.set(width / (max.x - min.x), height / (max.y - min.y), 1);
@@ -229,6 +234,9 @@ loader.load(
       },
     });
     shotMachine = createShotMachine({ camera, controls, canvas: renderer.domElement, machine });
+    if (firePlane && fireBase) {
+      fire = createFire({ camera, controls, canvas: renderer.domElement, machine, scene, firePlane, flameUniforms, base: fireBase });
+    }
     tap = createTap({ camera, controls, canvas: renderer.domElement, machine, scene, shotMachine });
   },
   undefined,
@@ -283,12 +291,10 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// ---------- FLAME INTERACTION ----------
-let holding = false;
+// ---------- FLAME WIND ----------
+// (lighting the fire and its size: fire.js)
 let targetWind = 0;
 
-renderer.domElement.addEventListener('pointerdown', () => (holding = true)); // canvas only, not the UI
-window.addEventListener('pointerup', () => (holding = false));
 window.addEventListener('pointermove', (e) => {
   targetWind = (e.clientX / window.innerWidth) * 2 - 1;
 });
@@ -306,9 +312,10 @@ renderer.setAnimationLoop(() => {
   tap?.update(dt);
   miniBelt?.update(dt);
 
-  // ease heat and wind
-  const heat = flameUniforms.uHeat;
-  heat.value += ((holding ? 1 : 0.4) - heat.value) * 0.05;
+  fire?.update(dt);
+  music.update(dt); // mariachi during interactions
+
+  // ease the wind
   const wind = flameUniforms.uWind;
   wind.value += (targetWind - wind.value) * 0.05;
   coilUniforms.uFlow.value *= 0.92; // streaks fade when grinding stops

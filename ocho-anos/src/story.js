@@ -8,6 +8,7 @@ gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
 const HERO_SHIFT = 0.22; // how far the machine sits to the right in the header (part of the screen width)
 
 // parts = Blender names (without _01), dir = camera direction from the part, zoom = distance × part size
+// hint = instruction shown in the scene, pinned next to the object named in hintAt
 // photo/caption = photo on the right of the postcard (steps without one use the full width for the message)
 const CHAPTERS = [
   {
@@ -15,6 +16,7 @@ const CHAPTERS = [
     title: 'Blue Weber agave',
     text: 'Every bottle starts with 100% Blue Weber agave from Los Altos de Jalisco and the Tequila valley. The plant grows for years before the jimadores cut away its leaves and harvest the heart: the piña.',
     hint: 'Drag to look around, scroll to zoom.',
+    hintAt: 'agave',
     parts: ['agave'],
     dir: [-0.4, 0.45, 1],
     zoom: 2.6,
@@ -23,7 +25,8 @@ const CHAPTERS = [
     kicker: 'El horno',
     title: 'Cooking the piñas',
     text: 'The piñas are cut in half and slow-cooked with steam for about 10 hours. The heat turns the agave starch into sweet sugars. Here it is a fire oven, at the distillery steam autoclaves do the job.',
-    hint: 'Hold the mouse down on the scene to turn up the heat.',
+    hint: 'Click the oven to light the fire.',
+    hintAt: 'oven',
     parts: ['oven', 'pina'],
     dir: [0.2, 0.4, 1],
     zoom: 1.8,
@@ -33,6 +36,7 @@ const CHAPTERS = [
     title: 'Crushing & fermenting',
     text: 'The cooked agave is crushed to release its juice. Then a proprietary yeast is added and the juice ferments for up to 72 hours, a recipe kept by the master distiller.',
     hint: 'Drag the stone wheel (the tahona) and watch the juice fill the glass coil.',
+    hintAt: 'tahona_wheel',
     parts: ['mill', 'tahona_wheel', 'tahona_arm'],
     photo: '/storycards/story-photo1.png',
     caption: 'a tahona at work',
@@ -44,6 +48,7 @@ const CHAPTERS = [
     title: 'Distilled twice',
     text: 'The fermented juice is distilled two times in pot stills. Each run concentrates the aromas and makes the spirit cleaner and smoother.',
     hint: 'Follow the coil from the still to the bottle.',
+    hintAt: 'coil',
     parts: ['still', 'coil'],
     photo: '/storycards/story-photo2.png',
     caption: 'a still, the horno behind',
@@ -55,6 +60,7 @@ const CHAPTERS = [
     title: 'Resting in oak',
     text: 'The Reposado rests in oak barrels for at least two months, which gives it its golden color and a rounder taste. The brand filters its water through Mexican silver for a softer finish.',
     hint: 'Watch the liquid move inside the bottle.',
+    hintAt: 'bottle',
     parts: ['bottle'],
     dir: [0.1, 0.3, 1],
     zoom: 1.6,
@@ -63,7 +69,8 @@ const CHAPTERS = [
     kicker: '¡Salud!',
     title: 'Ready to pour',
     text: 'From the agave field to the shot glass. Serve it with a slice of lime and enjoy it responsibly.',
-    hint: 'Turn the red tap handle to fill the empty glass, close it in time, then pull the machine handle down.',
+    hint: 'Pull the machine handle down to start the filling line.',
+    hintAt: 'machine_lever',
     parts: ['glass', 'lime', 'panel_shots', 'tap'],
     dir: [0.4, 0.5, 1],
     zoom: 1.5,
@@ -84,7 +91,8 @@ export function createStory({ camera, controls }) {
     kicker: document.querySelector('.story-kicker'),
     title: document.querySelector('.story-title'),
     text: document.querySelector('.story-text'),
-    hint: document.querySelector('.story-hint'),
+    hint: document.querySelector('.scene-hint-text'),
+    sceneHint: document.querySelector('.scene-hint'),
     dots: document.querySelector('.dots'),
     prev: document.querySelector('#prev'),
     next: document.querySelector('#next'),
@@ -141,19 +149,59 @@ export function createStory({ camera, controls }) {
     if (e.key === 'ArrowLeft') goTo(index - 1);
   });
 
-  // feedback from the shots machine in the last chapter
-  function lastHint(text) {
-    if (mode !== 'story' || index !== CHAPTERS.length - 1) return;
+  // ---------- HINT IN THE SCENE ----------
+  // the instruction floats next to a 3D part: its top center is projected to the screen every frame
+  let hintAnchor = null; // world position the hint points at
+  const projected = new THREE.Vector3();
+
+  function setHint(text, objectName) {
     el.hint.textContent = text;
-    gsap.fromTo(el.hint, { scale: 0.8 }, { scale: 1, duration: 0.5, ease: 'back.out(3)' });
+    hintAnchor = null;
+    const obj = machine?.getObjectByName(objectName);
+    if (!obj) return;
+    // only the object's own meshes (a multi-material object is a group with child objects in it)
+    const meshes = obj.isMesh ? [obj] : obj.children.filter((c) => c.isMesh && c.userData.name === undefined);
+    const box = new THREE.Box3();
+    (meshes.length ? meshes : [obj]).forEach((m) => box.expandByObject(m));
+    hintAnchor = new THREE.Vector3((box.min.x + box.max.x) / 2, box.max.y, (box.min.z + box.max.z) / 2);
   }
-  window.addEventListener('machine-start', () => lastHint('The light is on, warming up…'));
-  window.addEventListener('round-served', () => lastHint('¡Salud! 🥃 Pull the handle again for a fresh round.'));
-  window.addEventListener('shots-reset', () => lastHint('Fresh round! Pull the handle to send them off.'));
-  window.addEventListener('tap-full', () => lastHint('Full! Drag the tap handle back to close it.'));
-  window.addEventListener('tap-overflow', () => lastHint("It's overflowing! Close the tap!"));
-  window.addEventListener('tap-spill', () => lastHint("There's no glass under the tap, it's spilling!"));
-  window.addEventListener('tap-closed-full', () => lastHint('Perfect pour! Now pull the machine handle down.'));
+
+  function positionHint() {
+    if (mode !== 'story' || !hintAnchor) {
+      el.sceneHint.style.visibility = 'hidden';
+      return;
+    }
+    projected.copy(hintAnchor).project(camera);
+    const behind = projected.z > 1;
+    const x = THREE.MathUtils.clamp((projected.x * 0.5 + 0.5) * window.innerWidth, 16, window.innerWidth - 280);
+    const y = THREE.MathUtils.clamp((-projected.y * 0.5 + 0.5) * window.innerHeight, 90, window.innerHeight - 40);
+    el.sceneHint.style.transform = `translate(${x - 7}px, ${y}px) translate(0, -50%)`; // dot centered on the part
+    el.sceneHint.style.visibility = behind ? 'hidden' : 'visible'; // opacity does the fading (gsap)
+  }
+
+  // feedback from an interaction during one step: new text, and it moves to the part it's about
+  function stepHint(step, text, objectName) {
+    if (mode !== 'story' || index !== step) return;
+    setHint(text, objectName);
+    gsap.fromTo(el.sceneHint, { scale: 0.85 }, { scale: 1, duration: 0.5, ease: 'back.out(3)' });
+  }
+  const lastHint = (text, objectName) => stepHint(CHAPTERS.length - 1, text, objectName);
+
+  window.addEventListener('fire-lit', () => stepHint(1, 'Drag up or down on the fire to make it bigger or smaller.', 'oven'));
+  // the filling line: start the machine → fill → pull for the next glass → … → toast
+  window.addEventListener('machine-start', () => lastHint('The light is on, warming up…', 'machine_lever'));
+  window.addEventListener('tap-full', () => lastHint('Full! Drag the tap handle back to close it.', 'tap'));
+  window.addEventListener('tap-overflow', () => lastHint("It's overflowing! Close the tap!", 'tap'));
+  window.addEventListener('tap-spill', () => lastHint("There's no glass under the tap, it's spilling!", 'tap'));
+  window.addEventListener('tap-closed-short', () => lastHint('Not full yet, open the tap a bit more.', 'tap'));
+  window.addEventListener('glass-filled', (e) => lastHint(`Glass ${e.detail.filled} of ${e.detail.total} is full! Pull the handle for the next one.`, 'machine_lever'));
+  window.addEventListener('glass-not-full', () => lastHint('Fill the glass under the tap first.', 'tap'));
+  window.addEventListener('glass-ready', (e) => lastHint(e.detail.count === 1
+    ? 'Here comes your first glass! Turn the red tap handle to fill it.'
+    : 'Next glass! Turn the tap.', 'tap'));
+  window.addEventListener('all-filled', () => lastHint('All four are full! Scroll to raise a toast. 🥂', 'belt'));
+  window.addEventListener('salud', () => lastHint('¡Salud! 🥃 Pull the handle for a new round.', 'machine_lever'));
+  window.addEventListener('shots-reset', () => lastHint('The glasses are back in the machine. Pull the handle for a new round.', 'machine_lever'));
 
   function start() {
     mode = 'story';
@@ -225,7 +273,6 @@ export function createStory({ camera, controls }) {
       el.kicker.textContent = `Paso ${num} de ${String(CHAPTERS.length).padStart(2, '0')} · ${ch.kicker}`;
       el.title.textContent = ch.title;
       el.text.textContent = ch.text;
-      el.hint.textContent = ch.hint;
       el.postmark.textContent = num;
 
       el.greeting.textContent = ch.kicker;
@@ -234,6 +281,10 @@ export function createStory({ camera, controls }) {
       el.photo.alt = ch.caption ?? '';
       el.caption.textContent = ch.caption ?? '';
     }, dir);
+
+    // the hint appears next to its part once the camera has arrived
+    setHint(ch.hint, ch.hintAt);
+    gsap.fromTo(el.sceneHint, { opacity: 0 }, { opacity: 1, duration: 0.5, delay: 1.2, overwrite: true });
 
     [...el.dots.children].forEach((d, n) => d.classList.toggle('active', n === index));
     el.prev.disabled = index === 0;
@@ -269,11 +320,12 @@ export function createStory({ camera, controls }) {
       const box = new THREE.Box3().setFromObject(object);
       box.getCenter(center);
       size = box.getSize(new THREE.Vector3()).length();
-      if (mode === 'story') goTo(index);
+      if (mode === 'story') goTo(index); // also places the hint, now that the parts exist
     },
 
     // call every frame: during the intro the scroll drives the camera
     update() {
+      if (mode === 'story') positionHint();
       if (mode !== 'intro' || !machine) return;
       const t = intro.t;
       const e = t * t * (3 - 2 * t); // smoothstep, eases in and out
