@@ -28,7 +28,7 @@ function buildGround() {
 
   sun.target.position.copy(center);
   scene.add(sun.target);
-  const sunDir = new THREE.Vector3(-4, 3, 4).normalize();
+  const sunDir = SUN_DIRECTION.clone().normalize();
   sun.position.copy(center).addScaledVector(sunDir, size * 1.5);
   dayNight.setSunDirection(sunDir);
   const cam = sun.shadow.camera;
@@ -62,6 +62,8 @@ controls.enableDamping = true;
 const story = createStory({ camera, controls });
 
 // ---------- LIGHTS ----------
+// where the sun comes from: lower y = lower sun = longer shadows and warmer side light (sunset)
+const SUN_DIRECTION = new THREE.Vector3(-4, 1.4, 4);
 const hemi = new THREE.HemisphereLight('#ffd9c2', '#3b3a2a', 1.2); // sky / ground
 scene.add(hemi);
 const sun = new THREE.DirectionalLight('#ffb070', 3); // warm, low sun
@@ -78,6 +80,7 @@ scene.add(rim);
 // colors of the sky, floor, lights and reflections; the switch sits in the header
 const dayNight = createDayNight({ scene, renderer, hemi, sun, rim, toggle: document.querySelector('.mode-toggle') });
 setLiquidEnvironment(dayNight.envMap); // the liquid shaders refract the same sky
+dayNight.setSunDirection(SUN_DIRECTION); // the background shader's light matches the sun light
 
 
 const flameMaterial = createFlameMaterial({ flipY: false });
@@ -278,6 +281,7 @@ const timer = new THREE.Timer();
 
 renderer.setAnimationLoop(() => {
   timer.update();
+  dayNight.update(); // bakes the desert shader once, refreshes reflections on day/night
   controls.update();
   story.update();
   const dt = timer.getDelta();
