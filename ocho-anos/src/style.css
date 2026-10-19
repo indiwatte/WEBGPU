@@ -512,19 +512,6 @@ body.is-night .site-nav a:hover {
   line-height: 1.22;
 }
 
-.story-hint {
-  margin: 0;
-  font-family: 'Special Elite', monospace;
-  font-size: 0.78rem;
-  line-height: 1.35;
-  color: var(--stamp-red);
-}
-
-.story-hint::before {
-  content: 'P.D. ';
-  font-weight: 700;
-}
-
 .postcard-photo {
   margin: 0;
   padding-left: 14px;
@@ -642,4 +629,53 @@ body.is-night .site-nav a:hover {
 
 body.is-night .intro-stage {
   background: linear-gradient(90deg, rgba(10, 6, 30, 0.45), rgba(10, 6, 30, 0) 55%);
+}
+
+/* ---------- instruction pinned in the scene ---------- */
+.scene-hint {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  will-change: transform;
+}
+
+/* the dot sits exactly on the part, pulsing */
+.hint-dot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff8ec;
+  animation: hint-pulse 1.8s ease-out infinite;
+}
+
+@keyframes hint-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 248, 236, 0.7); }
+  70% { box-shadow: 0 0 0 16px rgba(255, 248, 236, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 248, 236, 0); }
+}
+
+.scene-hint-text {
+  max-width: 250px;
+  margin: 0;
+  padding: 9px 14px;
+  border-radius: 14px;
+  background: rgba(40, 20, 28, 0.72);
+  backdrop-filter: blur(6px);
+  color: #fff8ec;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25);
+}
+
+body.is-night .scene-hint-text {
+  background: rgba(18, 12, 44, 0.78);
 }
