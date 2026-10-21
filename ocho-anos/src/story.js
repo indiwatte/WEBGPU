@@ -47,7 +47,7 @@ const CHAPTERS = [
     kicker: 'La destilación',
     title: 'Distilled twice',
     text: 'The fermented juice is distilled two times in pot stills. Each run concentrates the aromas and makes the spirit cleaner and smoother.',
-    hint: 'Follow the coil from the still to the bottle.',
+    hint: null, // informative step, nothing to do here
     hintAt: 'coil',
     parts: ['still', 'coil'],
     photo: '/storycards/story-photo2.png',
@@ -59,7 +59,7 @@ const CHAPTERS = [
     kicker: 'El reposo',
     title: 'Resting in oak',
     text: 'The Reposado rests in oak barrels for at least two months, which gives it its golden color and a rounder taste. The brand filters its water through Mexican silver for a softer finish.',
-    hint: 'Watch the liquid move inside the bottle.',
+    hint: null, // informative step, nothing to do here
     hintAt: 'bottle',
     parts: ['bottle'],
     dir: [0.1, 0.3, 1],
@@ -283,12 +283,17 @@ export function createStory({ camera, controls }) {
     }, dir);
 
     // the hint appears next to its part once the camera has arrived
-    setHint(ch.hint, ch.hintAt);
-    gsap.fromTo(el.sceneHint, { opacity: 0 }, { opacity: 1, duration: 0.5, delay: 1.2, overwrite: true });
+    if (ch.hint) {
+      setHint(ch.hint, ch.hintAt);
+      gsap.fromTo(el.sceneHint, { opacity: 0 }, { opacity: 1, duration: 0.5, delay: 1.2, overwrite: true });
+    } else {
+      hintAnchor = null; // informative step: no instruction
+      gsap.to(el.sceneHint, { opacity: 0, duration: 0.3, overwrite: true });
+    }
 
     [...el.dots.children].forEach((d, n) => d.classList.toggle('active', n === index));
     el.prev.disabled = index === 0;
-    el.next.textContent = index === CHAPTERS.length - 1 ? 'otra vez ↺' : 'siguiente →';
+    el.next.textContent = index === CHAPTERS.length - 1 ? 'restart ↺' : 'next →';
 
     // camera
     if (!machine) return;

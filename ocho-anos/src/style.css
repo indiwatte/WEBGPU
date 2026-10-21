@@ -258,22 +258,16 @@ body.is-night .site-nav a:hover {
 .read-more {
   display: inline-block;
   pointer-events: auto;
-  padding: 0.85rem 1.7rem;
-  border-radius: 12px;
-  background: #fff;
-  color: #111;
-  font-family: 'DM Sans', sans-serif;
-  font-weight: 700;
-  font-size: 1rem;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  padding: 8px 14px;
+  background: var(--red);
+  color: #fff3df;
+  font-family: 'Bitter', serif;
+  font-size: 1.02rem;
   text-decoration: none;
-  box-shadow: 0 6px 20px rgba(60, 20, 30, 0.25);
-  transition: transform 0.2s;
 }
 
 .read-more:hover {
-  transform: translateY(-2px);
+  background: #e8473c;
 }
 
 .scroll-hint {
@@ -502,7 +496,7 @@ body.is-night .site-nav a:hover {
   margin: 0;
   font-family: 'Caveat', cursive;
   font-size: 1.05rem;
-  color: var(--ink-soft);
+  color: var(--stamp-red);
 }
 
 .story-text {
