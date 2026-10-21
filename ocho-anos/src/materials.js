@@ -1,11 +1,18 @@
 import * as THREE from 'three/webgpu';
+import { uniform, color, sin, time, mx_noise_float, vec2, step, mix } from 'three/tsl';
 
-// three.js materials per Blender material name. Procedural Blender shaders don't export to glTF
-// (they come out grey, glass comes out as black metal), so these are rebuilt here.
-// Blender materials not listed here are kept as exported.
+export const neonGlow = uniform(1.5);
+
+function neonMaterial() {
+  const material = new THREE.MeshStandardNodeMaterial({ color: '#ffe9b0', roughness: 0.35, metalness: 0 });
+  const hum = sin(time.mul(90)).mul(0.03).add(0.97);                        // fast, barely visible shimmer
+  const stutter = mix(1, 0.55, step(0.93, mx_noise_float(vec2(time.mul(6), 0.5)))); // now and then a short dip
+  material.emissiveNode = color('#ffc85a').mul(neonGlow).mul(hum).mul(stutter);
+  return material;
+}
+
 const LIBRARY = {
   // ---------- glass ----------
-  // real refraction: transmission renders the scene behind it, ior bends it, dispersion splits colors
   'Material.007': () => new THREE.MeshPhysicalNodeMaterial({
     color: '#ffffff', metalness: 0, roughness: 0.04,
     transmission: 1, thickness: 0.08, ior: 1.5, dispersion: 0.3,
@@ -15,40 +22,16 @@ const LIBRARY = {
     color: '#ffffff', metalness: 0, roughness: 0.45, transmission: 1, thickness: 0.02, ior: 1.5,
   }),
 
-  // ---------- metals ----------
-  'Gold': () => new THREE.MeshPhysicalNodeMaterial({
-    color: '#c8703f', metalness: 1, roughness: 0.25, clearcoat: 0.4, clearcoatRoughness: 0.1, // lacquered copper
-  }),
+  // ---------- metal ----------
   'Chrome Metal': () => new THREE.MeshStandardNodeMaterial({ color: '#d6d6d6', metalness: 1, roughness: 0.1 }),
 
-  // ---------- plants ----------
-  'Agave_Exotic': () => new THREE.MeshPhysicalNodeMaterial({
-    color: '#88b5ab', roughness: 0.55, sheen: 0.6, sheenColor: '#ffc8cc', sheenRoughness: 0.5, // soft pink edge light
-  }),
-  'Pina_Skin': () => new THREE.MeshPhysicalNodeMaterial({
-    color: '#5f6e3a', roughness: 0.6, sheen: 0.4, sheenColor: '#d9c27a',
-  }),
-  'lemonslice': () => new THREE.MeshPhysicalNodeMaterial({
-    color: '#d4e86a', roughness: 0.6, clearcoat: 0.6, clearcoatRoughness: 0.2, // juicy
-  }),
-  'Straw': () => new THREE.MeshStandardNodeMaterial({ color: '#c9a86a', roughness: 1 }),
+  // ---------- neon "shots" sign ----------
+  'Material': neonMaterial,
 
-  // ---------- tiles, stone, wood ----------
-  'Bathroom tile': () => new THREE.MeshStandardNodeMaterial({ color: '#5e968e', roughness: 0.6 }),
-  'Green old tiles': () => new THREE.MeshPhysicalNodeMaterial({
-    color: '#4f8a80', roughness: 0.5, clearcoat: 0.7, clearcoatRoughness: 0.15, // glazed
-  }),
-  'Stone wall': () => new THREE.MeshStandardNodeMaterial({ color: '#cdbfae', roughness: 0.95 }),
-  'Eroded Gray Marlstone': () => new THREE.MeshStandardNodeMaterial({ color: '#9b958e', roughness: 0.9 }),
-  'Natural Wood': () => new THREE.MeshStandardNodeMaterial({ color: '#8c6b4f', roughness: 0.8 }),
-  'Material.009': () => new THREE.MeshPhysicalNodeMaterial({ color: '#f5f2ec', roughness: 0.9, sheen: 1, sheenColor: '#ffffff' }), // salt rim
-
-  // ---------- labels (their images were procedural, so plain colors for now) ----------
-  'eticket': () => new THREE.MeshStandardNodeMaterial({ color: '#c9302c', roughness: 0.5 }),
-  'eticket.blue': () => new THREE.MeshStandardNodeMaterial({ color: '#2f8aa0', roughness: 0.5 }),
+  // ---------- salt rim on the shot glasses ----------
+  'Material.009': () => new THREE.MeshPhysicalNodeMaterial({ color: '#f5f2ec', roughness: 0.9, sheen: 1, sheenColor: '#ffffff' }),
 };
 
-// swap materials by name, one shared three.js material per Blender material
 export function applyMaterials(root) {
   const made = new Map();
   root.traverse((obj) => {

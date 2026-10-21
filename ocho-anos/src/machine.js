@@ -1,12 +1,14 @@
 import * as THREE from 'three/webgpu';
 import gsap from 'gsap';
+import { Observer } from 'gsap/Observer';
+import { music } from './music.js';
 import { positionWorld, fract, step, mix, color, uniform } from 'three/tsl';
 
-// shots machine: pull the handle → the light pops on, the machine warms up (shake + hum),
-// then the belt runs and the shots fall off the end
+gsap.registerPlugin(Observer);
+
 export function createShotMachine({ camera, controls, canvas, machine }) {
   const panel = machine.getObjectByName('panel_shots');
-  const light = machine.getObjectByName('machine_button'); // named "button" in Blender, it's the light
+  const light = machine.getObjectByName('machine_button');
   const lever = machine.getObjectByName('machine_lever');
   const dial = machine.getObjectByName('machine_dial');
   const belt = machine.getObjectByName('belt');
@@ -42,20 +44,20 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
     }
     if (dial) gsap.to(dial.rotation, { z: dial.rotation.z - 2.2, duration: 2, ease: 'power1.inOut' }); // gauge climbs
 
-    // warm up, then send the shots off
+    // warm up, then settle into an idle rumble: ready to fill
     gsap.to(shake, {
       level: 1,
       duration: 2,
       ease: 'power2.in',
       onComplete: () => {
         state = 'ready';
-        runBelt();
+        gsap.to(shake, { level: 0.3, duration: 0.8 });
+        advance(); // the first glass comes out
       },
     });
   }
 
   // ---------- SHAKING PARTS ----------
-  // everything standing on the shots box (still, bolts, tap…), but not the glasses on the belt
   const panelBox = new THREE.Box3().setFromObject(panel);
   const onBelt = (name) => /^(glass|glass_liquid|lime)_\d+$/.test(name);
   const shakers = machine.children
@@ -67,12 +69,7 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
     .map((obj) => ({ obj, base: obj.position.clone() }));
 
   // ---------- BELT ----------
-  const BELT_SPEED = 0.6; // units per second
-  const GRAVITY = 9.8;
-  const beltEnd = belt ? new THREE.Box3().setFromObject(belt).max.x : Infinity;
-  const groundY = new THREE.Box3().setFromObject(machine).min.y;
-
-  // one group per shot so glass + liquid + lime ride and tumble together
+  // one group per shot so glass + liquid + lime move together
   machine.updateMatrixWorld(true);
   const shots = [1, 2, 3, 4]
     .map((k) => {
@@ -90,44 +87,29 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
       return {
         group,
         liquid,
-        home: group.position.clone(),
-        radius: size.y / 2,
         rimRadius: size.x / 2,
         rimTop: glassBox.max.y - group.position.y, // relative to the group
         liquidBottom: liquidBox ? liquidBox.min.y - group.position.y : 0,
         liquidHeight,
-        fill: 1, // 1 = as full as in Blender
+        fill: 0, // 1 = as full as in Blender
         maxFill: liquidBox ? (glassBox.max.y - liquidBox.min.y) / liquidHeight : 1, // up to the rim
-        startsEmpty: false,
-        state: 'belt', // belt → falling → down
-        velocity: new THREE.Vector3(),
-        spin: 0,
+        done: false, // filled and the tap closed
       };
     })
     .filter(Boolean);
 
-  // liquid level: the liquid mesh starts at its bottom, so scaling y raises the surface
   function setFill(shot, fill) {
     shot.fill = fill;
     if (!shot.liquid) return;
     shot.liquid.scale.y = Math.max(Math.min(fill, shot.maxFill), 0.001);
     shot.liquid.visible = fill > 0.02;
   }
-
-  // what a falling shot can land on: everything except the shots themselves
-  const floorTargets = machine.children.filter((c) => !shots.some((s) => s.group === c));
-  const down = new THREE.Vector3(0, -1, 0);
-  const floorRay = new THREE.Raycaster();
-  function floorBelow(pos) {
-    floorRay.set(pos, down);
-    const hit = floorRay.intersectObjects(floorTargets, true)[0];
-    return hit ? hit.point.y : groundY;
-  }
+  shots.forEach((shot) => setFill(shot, 0)); // all glasses start empty
 
   // moving seams on the belt surface
   const beltOffset = uniform(0);
-  const beltSpeed = { value: 0 }; // 0..1, eased so the belt starts and stops smoothly
-  let beltRunning = false;
+  const beltSpeed = { value: 0 };
+  const BELT_SPEED = 0.45;
   if (belt) {
     const base = belt.material.color.clone();
     const material = new THREE.MeshStandardNodeMaterial({ roughness: belt.material.roughness });
@@ -136,91 +118,172 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
     belt.material = material;
   }
 
-  function runBelt() {
-    if (beltRunning) return;
-    // nothing left on the belt → bring a fresh round first
-    if (!shots.some((s) => s.state === 'belt')) return resetShots();
-    beltRunning = true;
-    gsap.to(beltSpeed, { value: 1, duration: 0.4 });
+  // ---------- FILLING LINE ----------
+  const beltBox = belt ? new THREE.Box3().setFromObject(belt) : null;
+  const beltEnd = beltBox ? beltBox.max.x : Infinity;
+  const beltStart = beltBox ? beltBox.min.x : -Infinity;
+  let slotX = [];
+  let dispenseX = 0;
+  let lineZ = 0;
+  let spacing = 0.6;
+  let queue = [...shots]; // still inside the machine
+  let line = [];
+  let moving = false;
+  let filled = 0;
+
+  function hideInMachine(shot) {
+    shot.group.visible = false;
+    shot.group.scale.setScalar(0.001);
+    shot.group.position.set(dispenseX, shot.group.position.y, lineZ);
+  }
+
+  function setStation(x, z) {
+    const r = Math.max(...shots.map((s) => s.rimRadius));
+    spacing = Math.min(0.65, (beltEnd - r - x) / (shots.length - 1));
+    slotX = shots.map((_, i) => x + i * spacing);
+    dispenseX = Math.max(beltStart + r, x - spacing); // where a glass comes out
+    lineZ = z;
+    queue = [...shots];
+    line = [];
+    shots.forEach(hideInMachine); // the belt starts empty
+  }
+
+  function advance() {
+    if (!queue.length && !line.length) return;
+    moving = true;
+    const next = queue.shift();
+    const tl = gsap.timeline({
+      onComplete: () => {
+        if (next) line.unshift(next);
+        moving = false;
+        gsap.to(beltSpeed, { value: 0, duration: 0.4 });
+        gsap.to(shake, { level: 0.3, duration: 0.6 });
+        window.dispatchEvent(new CustomEvent('glass-ready', { detail: { count: line.length } }));
+      },
+    });
+    line.forEach((shot, i) => {
+      tl.to(shot.group.position, { x: slotX[i + 1], duration: 1.4, ease: 'power2.inOut' }, 0);
+    });
+    if (next) {
+      next.group.visible = true;
+      next.group.position.x = dispenseX;
+      tl.to(next.group.scale, { x: 1, y: 1, z: 1, duration: 0.45, ease: 'back.out(2)' }, 0.2) // pops out of the machine
+        .to(next.group.position, { x: slotX[0], duration: 1, ease: 'power2.inOut' }, 0.4);
+    }
+    gsap.to(beltSpeed, { value: 1, duration: 0.3 });
     gsap.to(shake, { level: 0.7, duration: 0.3 });
   }
 
-  function stopBelt() {
-    beltRunning = false;
-    gsap.to(beltSpeed, { value: 0, duration: 0.5 });
-    gsap.to(shake, { level: 0.3, duration: 0.6 });
-    window.dispatchEvent(new CustomEvent('round-served'));
+  // the tap closed with a full glass under it
+  window.addEventListener('tap-closed-full', () => {
+    const shot = line[0];
+    if (moving || !shot || shot.done || shot.fill < 1) return;
+    shot.done = true;
+    filled++;
+    if (filled === shots.length) startFinale();
+    else window.dispatchEvent(new CustomEvent('glass-filled', { detail: { filled, total: shots.length } }));
+  });
+
+  // ---------- FINALE: a toast with two glasses, driven by scrolling ----------
+  const toast = { p: 0 };   // 0 = on the belt, 1 = clinked
+  let toastTarget = 0;
+  let finale = null;
+  let clinked = false;
+  const clink = createClink();
+
+  function startFinale() {
+    const [a, b] = [line[1], line[2]];
+    const camDir = new THREE.Vector3();
+    camera.getWorldDirection(camDir).setY(0).normalize();
+    const right = new THREE.Vector3().crossVectors(camDir, new THREE.Vector3(0, 1, 0)).normalize();
+    const mid = a.group.position.clone().lerp(b.group.position, 0.5);
+    const meet = mid.clone().addScaledVector(camDir, -spacing * 0.9).add(new THREE.Vector3(0, spacing * 1.4, 0));
+    finale = {
+      a, b, right, camDir, meet,
+      fromA: a.group.position.clone(), fromB: b.group.position.clone(),
+      rotA: a.group.quaternion.clone(), rotB: b.group.quaternion.clone(),
+    };
+    toast.p = 0;
+    toastTarget = 0;
+    clinked = false;
+    controls.enableZoom = false; // the wheel drives the toast now
+    toastObserver.enable();
+    window.dispatchEvent(new CustomEvent('all-filled'));
   }
 
-  function resetShots() {
-    shots.forEach((shot, i) => {
-      const { group } = shot;
-      gsap.timeline({ delay: i * 0.12 })
-        .to(group.scale, { x: 0, y: 0, z: 0, duration: 0.25, ease: 'power2.in' })
-        .call(() => {
-          gsap.killTweensOf(group.rotation);
-          group.position.copy(shot.home);
-          group.rotation.set(0, 0, 0);
-          setFill(shot, shot.startsEmpty ? 0 : 1);
-          shot.velocity.set(0, 0, 0);
-          shot.state = 'belt';
-        })
-        .to(group.scale, { x: 1, y: 1, z: 1, duration: 0.4, ease: 'back.out(2)' });
-    });
-    window.dispatchEvent(new CustomEvent('shots-reset'));
-  }
-
-  // belt movement + simple falling physics, called from update()
-  function stepShots(dt) {
-    const move = BELT_SPEED * beltSpeed.value * dt;
-    beltOffset.value += move;
-
-    for (const shot of shots) {
-      const { group, velocity } = shot;
-
-      if (shot.state === 'belt') {
-        if (!beltRunning && beltSpeed.value === 0) continue;
-        group.position.x += move;
-        if (group.position.x > beltEnd) {
-          // off the end: keep the belt's speed, a little hop, and tip forward
-          shot.state = 'falling';
-          velocity.set(BELT_SPEED, 0.6, 0);
-          shot.spin = -(4 + Math.random() * 3);
-        }
-      } else if (shot.state === 'falling') {
-        velocity.y -= GRAVITY * dt;
-        group.position.addScaledVector(velocity, dt);
-        group.rotation.z += shot.spin * dt;
-
-        const floor = floorBelow(group.position);
-        if (group.position.y - shot.radius < floor) {
-          group.position.y = floor + shot.radius;
-          if (shot.liquid) shot.liquid.visible = false; // spilled
-          velocity.y = -velocity.y * 0.35; // bounce
-          velocity.x *= 0.6;
-          shot.spin *= 0.5;
-          if (Math.abs(velocity.y) < 0.4) {
-            // settle: lie flat on its side or stand upright, whichever is closest
-            shot.state = 'down';
-            velocity.set(0, 0, 0);
-            const rest = Math.round(group.rotation.z / (Math.PI / 2)) * (Math.PI / 2);
-            gsap.to(group.rotation, { z: rest, duration: 0.3, ease: 'power2.out' });
-          }
-        }
-      }
+  const qTilt = new THREE.Quaternion();
+  function applyToast() {
+    if (!finale) return;
+    const { a, b, right, camDir, meet, fromA, fromB, rotA, rotB } = finale;
+    const p = toast.p;
+    const lift = THREE.MathUtils.smoothstep(p, 0, 0.45);      // off the belt, up and towards you
+    const close = THREE.MathUtils.smoothstep(p, 0.45, 0.92);  // towards each other
+    const gap = THREE.MathUtils.lerp(spacing * 0.75, a.rimRadius * 0.95, close);
+    for (const [shot, from, rot, side] of [[a, fromA, rotA, -1], [b, fromB, rotB, 1]]) {
+      const target = meet.clone().addScaledVector(right, side * gap);
+      shot.group.position.lerpVectors(from, target, lift);
+      if (lift >= 1) shot.group.position.copy(target);
+      qTilt.setFromAxisAngle(camDir, side * 0.45 * close); // rims tip towards each other
+      shot.group.quaternion.copy(rot).premultiply(qTilt);
     }
+    if (p > 0.97 && !clinked) {
+      clinked = true;
+      clink.play();
+      gsap.fromTo(toast, { p: 0.9 }, { p: 1, duration: 0.25, ease: 'back.out(4)', onUpdate: applyToast }); // little bounce
+      window.dispatchEvent(new CustomEvent('salud'));
+    }
+  }
 
-    if (beltRunning && !shots.some((s) => s.state === 'belt')) stopBelt();
+  const toastObserver = Observer.create({
+    target: window,
+    type: 'wheel,touch',
+    onChangeY: (self) => {
+      toastTarget = THREE.MathUtils.clamp(toastTarget + self.deltaY * 0.0012, 0, 1);
+      music.activity();
+      gsap.to(toast, { p: toastTarget, duration: 0.6, ease: 'power2.out', overwrite: true, onUpdate: applyToast });
+    },
+  });
+  toastObserver.disable();
+
+  function resetRound() {
+    toastObserver.disable();
+    controls.enableZoom = true;
+    gsap.killTweensOf(toast);
+    if (finale) {
+      const { a, b, fromA, fromB, rotA, rotB } = finale;
+      gsap.to(a.group.position, { x: fromA.x, y: fromA.y, z: fromA.z, duration: 0.8, ease: 'power2.inOut' });
+      gsap.to(b.group.position, { x: fromB.x, y: fromB.y, z: fromB.z, duration: 0.8, ease: 'power2.inOut' });
+      a.group.quaternion.copy(rotA);
+      b.group.quaternion.copy(rotB);
+    }
+    finale = null;
+    filled = 0;
+    moving = true;
+    const tl = gsap.timeline({
+      delay: 0.8,
+      onComplete: () => {
+        shots.forEach((shot) => {
+          hideInMachine(shot);
+          shot.done = false;
+          setFill(shot, 0);
+        });
+        queue = [...shots];
+        line = [];
+        moving = false;
+        window.dispatchEvent(new CustomEvent('shots-reset'));
+      },
+    });
+    line.forEach((shot, i) => {
+      tl.to(shot.group.position, { x: dispenseX, duration: 1.2, ease: 'power2.inOut' }, i * 0.1)
+        .to(shot.group.scale, { x: 0.001, y: 0.001, z: 0.001, duration: 0.3 }, 0.9 + i * 0.1);
+    });
   }
 
   // ---------- HANDLE ----------
-  // only the stick with the ball moves, the red slot (M_Orange) stays on the machine
   const leverMeshes = lever.isMesh ? [lever] : lever.children.filter((c) => c.isMesh);
   const stick = leverMeshes.find((m) => m.material.name !== 'M_Orange') ?? leverMeshes[0];
-  // the stick shares the agave material in Blender, give it its own white one
   stick.material = new THREE.MeshPhysicalNodeMaterial({ color: '#f4f1ec', roughness: 0.3, clearcoat: 0.6 });
 
-  // the stick's origin isn't its hinge: use the middle of its lowest vertices (the bottom of the stick)
   stick.geometry.computeBoundingBox();
   const { min, max } = stick.geometry.boundingBox;
   const cutoff = min.y + (max.y - min.y) * 0.15;
@@ -236,7 +299,6 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
   }
   hinge.divideScalar(lowCount).multiply(stick.scale);
 
-  // hang the stick under a pivot at the hinge, then rotate the pivot
   const pivot = new THREE.Object3D();
   pivot.position.copy(stick.position).add(hinge);
   stick.parent.add(pivot);
@@ -258,10 +320,14 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
   }
 
   function handlePulled() {
-    hum.start(); // audio may only start after a user gesture
+    music.activity(8); // a bit longer: the belt keeps moving
+    hum.start();
     hum.clunk();
-    if (state === 'idle') startMachine();
-    else if (state === 'ready') runBelt();
+    if (state === 'idle') return startMachine();
+    if (state !== 'ready' || moving) return;
+    if (finale) return clinked ? resetRound() : null;     // after the toast: a new round
+    if (!line.length || line[0].done) return advance();   // empty belt or full glass → next glass
+    window.dispatchEvent(new CustomEvent('glass-not-full'));
   }
 
   // ---------- POINTER ----------
@@ -277,13 +343,12 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
   }
   const hits = (obj) => raycaster.intersectObject(obj, true).length > 0;
 
-  // capture: runs before OrbitControls and the flame's hold-to-heat
   canvas.addEventListener('pointerdown', (e) => {
     setPointer(e);
     if (!hits(stick)) return;
 
     e.stopImmediatePropagation();
-    gsap.killTweensOf(pivot.rotation); // stop a spring-back that's still running
+    gsap.killTweensOf(pivot.rotation);
     dragging = true;
     startY = e.clientY;
     controlsWereEnabled = controls.enabled;
@@ -317,34 +382,14 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
   canvas.addEventListener('pointercancel', () => dragging && releaseHandle());
 
   return {
-    // the shot standing on the belt under a point (x, z), if any
     shotUnder(x, z) {
-      return shots.find((s) => s.state === 'belt' &&
-        Math.hypot(s.group.position.x - x, s.group.position.z - z) < s.rimRadius) ?? null;
+      const shot = line[0];
+      if (moving || finale || !shot) return null;
+      return Math.hypot(shot.group.position.x - x, shot.group.position.z - z) < shot.rimRadius ? shot : null;
     },
 
-    // move the nearest shot under a point; the others step aside so nothing overlaps
-    placeUnder(x, z) {
-      const dist = (s) => Math.hypot(s.home.x - x, s.home.z - z);
-      const nearest = [...shots].sort((a, b) => dist(a) - dist(b))[0];
-      if (!nearest) return null;
-      nearest.home.set(x, nearest.home.y, z);
-
-      const placed = [nearest];
-      const others = shots.filter((s) => s !== nearest).sort((a, b) => Math.abs(a.home.x - x) - Math.abs(b.home.x - x));
-      for (const o of others) {
-        for (const p of placed) {
-          const minGap = o.rimRadius + p.rimRadius + 0.02;
-          const dz = o.home.z - p.home.z;
-          const needX = Math.sqrt(Math.max(minGap * minGap - dz * dz, 0));
-          const side = Math.sign(o.home.x - p.home.x) || 1;
-          if (Math.abs(o.home.x - p.home.x) < needX) o.home.x = p.home.x + side * needX;
-        }
-        placed.push(o);
-      }
-      shots.forEach((s) => s.group.position.copy(s.home));
-      return nearest;
-    },
+    // tap.js tells where the spout is: slot 0 goes under it
+    setStation,
 
     setFill,
 
@@ -358,13 +403,35 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
           base.z + Math.sin(time * 53 + base.z) * a
         );
       }
-      stepShots(dt);
+      beltOffset.value += BELT_SPEED * beltSpeed.value * dt; // seams move while the belt runs
       hum.setLevel(shake.level);
     },
   };
 }
 
-// motor hum made with Web Audio: two detuned low oscillators, a lowpass, and a rattle on the volume
+// glass clink: two short bright pings, slightly detuned
+function createClink() {
+  let ctx;
+  return {
+    play() {
+      ctx ??= new AudioContext();
+      const now = ctx.currentTime;
+      for (const [freq, delay] of [[2637, 0], [3136, 0.012], [5274, 0.02]]) {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, now + delay);
+        g.gain.exponentialRampToValueAtTime(0.25, now + delay + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + delay + 0.6);
+        osc.connect(g).connect(ctx.destination);
+        osc.start(now + delay);
+        osc.stop(now + delay + 0.7);
+      }
+    },
+  };
+}
+
 function createHum() {
   let ctx, gain, filter, osc1, osc2, rattle;
   let lastLevel = -1;
@@ -403,7 +470,7 @@ function createHum() {
   return {
     start() {
       if (!ctx) init();
-      ctx.resume(); // browsers only allow audio after a click
+      ctx.resume();
     },
 
     setLevel(level) {
