@@ -6,7 +6,6 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { pass } from 'three/tsl';
 import { createFlameMaterial, flameUniforms } from './flame.js';
-import { createLiquidMaterial, setLiquidEnvironment } from './liquid.js';
 import { createStory } from './story.js';
 import { createTahonaDrag } from './tahona.js';
 import { createShotMachine } from './machine.js';
@@ -98,7 +97,6 @@ dayNight.onChange((t) => {
   neonGlow.value = THREE.MathUtils.lerp(1, 2.5, t);
   glow.strength.value = THREE.MathUtils.lerp(0.4, 0.9, t);
 });
-setLiquidEnvironment(dayNight.envMap); // the liquid shaders refract the same sky
 dayNight.setSunDirection(SUN_DIRECTION); // the background shader's light matches the sun light
 
 
@@ -110,7 +108,6 @@ const bottleTequila = new THREE.MeshPhysicalNodeMaterial({
   color: '#c8935a', roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.05,
   sheen: 0.3, sheenColor: '#ffd9a0', // a warm glow at the edges
 });
-const shotLiquidMaterial = createLiquidMaterial({ upright: false, filled: true }); // shot glasses: wide, full of tequila
 
 // a Blender object with several materials loads as a Group of meshes,
 // this returns just those meshes (not the child objects parented to it)
@@ -206,14 +203,9 @@ loader.load(
       console.warn('❌ bottle_liquid NOT found, check the name in Blender');
     }
 
-    // tequila in the shot glasses, sized from the first one (they're all the same mesh size)
-    const shotLiquids = [1, 2, 3, 4].map((k) => machine.getObjectByName(`glass_liquid_0${k}`)).filter(Boolean);
-    if (shotLiquids.length) {
-      const box = (shotLiquids[0].geometry.computeBoundingBox(), shotLiquids[0].geometry.boundingBox);
-      shotLiquidMaterial.userData.uniforms.uHeight.value = box.max.y - box.min.y;
-      shotLiquidMaterial.userData.uniforms.uWidth.value = box.max.x - box.min.x;
-      shotLiquids.forEach((m) => (m.material = shotLiquidMaterial));
-    }
+    // tequila in the shot glasses: the same plain tequila as the bottle
+    [1, 2, 3, 4].map((k) => machine.getObjectByName(`glass_liquid_0${k}`)).filter(Boolean)
+      .forEach((m) => (m.material = bottleTequila));
 
     // everything casts a shadow except the shader planes/volumes
     machine.traverse((obj) => {

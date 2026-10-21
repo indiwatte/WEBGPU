@@ -8,7 +8,7 @@
 // - the sky gets a gradient (the original sky is one color plus the sun glow), stars at night
 // - the light direction follows the scene's sun
 // - the normal uses a fixed 8 octaves (the original picks 2–12 depending on distance)
-// - a small copy is rendered into a texture for reflections and the liquid shaders
+// - a small copy is rendered into a texture for the reflections on the copper and glass
 
 import * as THREE from 'three/webgpu';
 import {

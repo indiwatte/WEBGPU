@@ -11,12 +11,11 @@ School project · not affiliated with Rooster Rojo.
 https://webgpu-gules.vercel.app/
 
 ## Original shaders (Shadertoy)
-All three are ported from GLSL to Three.js TSL, which compiles to WGSL for WebGPU.
+Both are ported from GLSL to Three.js TSL, which compiles to WGSL for WebGPU.
 
 | Shader | Original | Used in | Responds to |
 |---|---|---|---|
 | "Flame" by XT95 (anatole duprat), 2013, CC BY-NC-SA 3.0 | https://www.shadertoy.com/view/MdX3zr | `src/flame.js` — the oven fire | click the oven to light it, drag up/down to resize it, mouse position bends it (uniforms `uOn`, `uHeat`, `uWind`) |
-| Glass blobs (raymarched SDF spheres + torus) — **TODO: name, author** | **TODO: Shadertoy URL** | `src/liquid.js` — the tequila in the shot glasses | fill level from the tap, rendered from the real camera |
 | "Eroded sandstone hills" by jarble, 2021 (terrain raymarching, soft shadows, fog); noise trick by Dave_Hoskins | https://www.shadertoy.com/view/fsK3Rt | `src/desert.js` — the live background | the camera (orbit / scroll), the day/night switch |
 
 The changes made to each shader are listed at the top of its file.
