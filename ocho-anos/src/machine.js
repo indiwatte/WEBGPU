@@ -6,13 +6,9 @@ import { positionWorld, fract, step, mix, color, uniform } from 'three/tsl';
 
 gsap.registerPlugin(Observer);
 
-// shots machine as a filling line: the belt starts empty. Pull the handle → the machine warms up and
-// the first glass comes out and slides under the tap. Fill it, pull again → it moves on and the next
-// glass comes out. After four full glasses, two of them lift off and scrolling brings them together
-// for a toast.
 export function createShotMachine({ camera, controls, canvas, machine }) {
   const panel = machine.getObjectByName('panel_shots');
-  const light = machine.getObjectByName('machine_button'); // named "button" in Blender, it's the light
+  const light = machine.getObjectByName('machine_button');
   const lever = machine.getObjectByName('machine_lever');
   const dial = machine.getObjectByName('machine_dial');
   const belt = machine.getObjectByName('belt');
@@ -62,7 +58,6 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
   }
 
   // ---------- SHAKING PARTS ----------
-  // everything standing on the shots box (still, bolts, tap…), but not the glasses on the belt
   const panelBox = new THREE.Box3().setFromObject(panel);
   const onBelt = (name) => /^(glass|glass_liquid|lime)_\d+$/.test(name);
   const shakers = machine.children
@@ -103,7 +98,6 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
     })
     .filter(Boolean);
 
-  // liquid level: the liquid mesh starts at its bottom, so scaling y raises the surface
   function setFill(shot, fill) {
     shot.fill = fill;
     if (!shot.liquid) return;
@@ -114,7 +108,7 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
 
   // moving seams on the belt surface
   const beltOffset = uniform(0);
-  const beltSpeed = { value: 0 }; // 0..1, eased so the belt starts and stops smoothly
+  const beltSpeed = { value: 0 };
   const BELT_SPEED = 0.45;
   if (belt) {
     const base = belt.material.color.clone();
@@ -125,8 +119,6 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
   }
 
   // ---------- FILLING LINE ----------
-  // slot 0 sits under the tap (set by tap.js), slots 1–3 further along the belt.
-  // glasses wait inside the machine (queue) and come out at the start of the belt (dispenseX).
   const beltBox = belt ? new THREE.Box3().setFromObject(belt) : null;
   const beltEnd = beltBox ? beltBox.max.x : Infinity;
   const beltStart = beltBox ? beltBox.min.x : -Infinity;
@@ -135,7 +127,7 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
   let lineZ = 0;
   let spacing = 0.6;
   let queue = [...shots]; // still inside the machine
-  let line = [];          // on the belt: line[0] is under the tap, then further along
+  let line = [];
   let moving = false;
   let filled = 0;
 
@@ -156,7 +148,6 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
     shots.forEach(hideInMachine); // the belt starts empty
   }
 
-  // every glass on the belt moves one slot on, and the next glass comes out and slides under the tap
   function advance() {
     if (!queue.length && !line.length) return;
     moving = true;
@@ -196,7 +187,7 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
   // ---------- FINALE: a toast with two glasses, driven by scrolling ----------
   const toast = { p: 0 };   // 0 = on the belt, 1 = clinked
   let toastTarget = 0;
-  let finale = null;        // { a, b, from, to } while the finale is on
+  let finale = null;
   let clinked = false;
   const clink = createClink();
 
@@ -220,7 +211,6 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
     window.dispatchEvent(new CustomEvent('all-filled'));
   }
 
-  // place the two glasses for a progress p (0..1): lift off and spread → come together tilted → clink
   const qTilt = new THREE.Quaternion();
   function applyToast() {
     if (!finale) return;
@@ -255,7 +245,6 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
   });
   toastObserver.disable();
 
-  // new round: the glasses go back into the machine and the belt is empty again
   function resetRound() {
     toastObserver.disable();
     controls.enableZoom = true;
@@ -291,13 +280,10 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
   }
 
   // ---------- HANDLE ----------
-  // only the stick with the ball moves, the red slot (M_Orange) stays on the machine
   const leverMeshes = lever.isMesh ? [lever] : lever.children.filter((c) => c.isMesh);
   const stick = leverMeshes.find((m) => m.material.name !== 'M_Orange') ?? leverMeshes[0];
-  // the stick shares the agave material in Blender, give it its own white one
   stick.material = new THREE.MeshPhysicalNodeMaterial({ color: '#f4f1ec', roughness: 0.3, clearcoat: 0.6 });
 
-  // the stick's origin isn't its hinge: use the middle of its lowest vertices (the bottom of the stick)
   stick.geometry.computeBoundingBox();
   const { min, max } = stick.geometry.boundingBox;
   const cutoff = min.y + (max.y - min.y) * 0.15;
@@ -313,7 +299,6 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
   }
   hinge.divideScalar(lowCount).multiply(stick.scale);
 
-  // hang the stick under a pivot at the hinge, then rotate the pivot
   const pivot = new THREE.Object3D();
   pivot.position.copy(stick.position).add(hinge);
   stick.parent.add(pivot);
@@ -336,7 +321,7 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
 
   function handlePulled() {
     music.activity(8); // a bit longer: the belt keeps moving
-    hum.start(); // audio may only start after a user gesture
+    hum.start();
     hum.clunk();
     if (state === 'idle') return startMachine();
     if (state !== 'ready' || moving) return;
@@ -358,13 +343,12 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
   }
   const hits = (obj) => raycaster.intersectObject(obj, true).length > 0;
 
-  // capture: runs before OrbitControls and the flame's hold-to-heat
   canvas.addEventListener('pointerdown', (e) => {
     setPointer(e);
     if (!hits(stick)) return;
 
     e.stopImmediatePropagation();
-    gsap.killTweensOf(pivot.rotation); // stop a spring-back that's still running
+    gsap.killTweensOf(pivot.rotation);
     dragging = true;
     startY = e.clientY;
     controlsWereEnabled = controls.enabled;
@@ -398,7 +382,6 @@ export function createShotMachine({ camera, controls, canvas, machine }) {
   canvas.addEventListener('pointercancel', () => dragging && releaseHandle());
 
   return {
-    // the glass under the tap, if the belt isn't moving and it isn't part of the toast
     shotUnder(x, z) {
       const shot = line[0];
       if (moving || finale || !shot) return null;
@@ -449,7 +432,6 @@ function createClink() {
   };
 }
 
-// motor hum made with Web Audio: two detuned low oscillators, a lowpass, and a rattle on the volume
 function createHum() {
   let ctx, gain, filter, osc1, osc2, rattle;
   let lastLevel = -1;
@@ -488,7 +470,7 @@ function createHum() {
   return {
     start() {
       if (!ctx) init();
-      ctx.resume(); // browsers only allow audio after a click
+      ctx.resume();
     },
 
     setLevel(level) {

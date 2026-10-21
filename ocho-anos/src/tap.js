@@ -3,12 +3,10 @@ import { uv, time, sin, mix, color } from 'three/tsl';
 import { music } from './music.js';
 
 const OPEN_MAX = Math.PI / 2;      // handle turned a quarter = fully open
-const FLOW_RATE = 0.35;            // fill per second at full open (1 = Blender's level)
+const FLOW_RATE = 0.35;
 const GRAVITY = 9.8;
 const MAX_DROPS = 400;
 
-// turn the red handle on the tap → tequila flows from the spout into the glass below.
-// close it yourself, or the glass overflows and spills onto the table.
 export function createTap({ camera, controls, canvas, machine, scene, shotMachine }) {
   const tap = machine.getObjectByName('tap');
   if (!tap || !shotMachine) {
@@ -25,7 +23,6 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
     return { update() {} };
   }
 
-  // average of the vertices near the top or bottom of a mesh (in the tap's space)
   function edgeCenter(mesh, fromTop, band = 0.02) {
     const pos = mesh.geometry.attributes.position;
     mesh.geometry.computeBoundingBox();
@@ -44,7 +41,6 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
   }
 
   // ---------- HANDLE ----------
-  // turns around the valve's upright stem: hang it under a pivot on top of the valve
   const stem = edgeCenter(valve, true);
   const pivot = new THREE.Object3D();
   pivot.position.copy(stem);
@@ -60,11 +56,9 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
   tap.updateMatrixWorld(true);
   tap.localToWorld(spout.copy(spoutLocal));
 
-  // the filling line puts its first slot right under the spout
   shotMachine.setStation(spout.x, spout.z);
 
   // ---------- STREAM ----------
-  // open cylinder hanging down from y = 0, scaled to the right length every frame
   const streamGeo = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true).translate(0, -0.5, 0);
   const streamMat = new THREE.MeshPhysicalNodeMaterial({ roughness: 0.05, clearcoat: 1, transparent: true, opacity: 0.85 });
   const ripples = sin(uv().y.mul(60).add(time.mul(25))).mul(0.5).add(0.5); // bands running down
@@ -90,7 +84,7 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
   const down = new THREE.Vector3(0, -1, 0);
   const start = new THREE.Vector3();
   function floorBelow(pos) {
-    floorRay.set(start.copy(pos).setY(pos.y - 0.02), down); // just below, so it doesn't hit the spout itself
+    floorRay.set(start.copy(pos).setY(pos.y - 0.02), down);
     const hit = floorRay.intersectObject(machine, true)[0];
     return hit ? hit.point.y : 0;
   }
@@ -104,7 +98,6 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
     d.floor = floorBelow(pos);
   }
 
-  // a landed drop grows the nearest puddle (or starts a new one)
   function addToPuddle(pos, amount) {
     let puddle = puddles.find((p) => Math.abs(p.mesh.position.y - pos.y) < 0.05 &&
       Math.hypot(p.mesh.position.x - pos.x, p.mesh.position.z - pos.z) < p.size + 0.05);
@@ -158,12 +151,11 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
     controls.enabled = false;
     canvas.setPointerCapture(e.pointerId);
     canvas.style.cursor = 'grabbing';
-    pour.start(); // audio may only start after a user gesture
+    pour.start();
   }, { capture: true });
 
   canvas.addEventListener('pointermove', (e) => {
     if (dragging) {
-      // drag right to open, left to close; it stays where you leave it
       pivot.rotation.y = THREE.MathUtils.clamp(startAngle + (e.clientX - startX) * 0.01, 0, OPEN_MAX);
       open = pivot.rotation.y / OPEN_MAX;
       return;
@@ -189,7 +181,7 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
 
   // ---------- STORY FEEDBACK ----------
   let told = '';         // only send each message once per pour
-  let pouredInto = null; // the glass that was filled during this pour
+  let pouredInto = null;
   function tell(name) {
     if (told === name) return;
     told = name;
@@ -207,7 +199,6 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
       const pouring = open > 0.02;
       const shot = shotMachine.shotUnder(spout.x, spout.z);
 
-      // where the stream ends: the liquid surface in the glass, or whatever is below
       let endY;
       if (shot) {
         const level = Math.min(shot.fill, shot.maxFill);
@@ -226,7 +217,7 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
 
       // fill or spill
       const flow = pouring ? FLOW_RATE * open * dt : 0;
-      let spilling = 0; // fill units per frame going over the edge or onto the table
+      let spilling = 0;
       if (pouring && shot) {
         pouredInto = shot;
         shotMachine.setFill(shot, shot.fill + flow);
@@ -240,7 +231,6 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
         spilling = flow;
         tell('tap-spill');
       } else if (!pouring && pouredInto) {
-        // tap closed after pouring into a glass: full (even if it overflowed) or not yet
         window.dispatchEvent(new CustomEvent(pouredInto.fill >= 1 ? 'tap-closed-full' : 'tap-closed-short'));
         pouredInto = null;
         told = '';
@@ -248,7 +238,6 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
         told = '';
       }
 
-      // drops: over the rim of a full glass, or splashing where the stream hits
       const count = Math.ceil(spilling * 400);
       for (let i = 0; i < count; i++) {
         if (shot) {
@@ -280,14 +269,12 @@ export function createTap({ camera, controls, canvas, machine, scene, shotMachin
       }
       drops.instanceMatrix.needsUpdate = true;
 
-      // sound: louder with the flow, higher as the glass fills up (like a real glass)
       pour.set(pouring ? open : 0, shot ? Math.min(shot.fill / shot.maxFill, 1) : 0.2);
-      music.setPour(pouring ? open : 0, spilling > 0); // the soundtrack gets louder while pouring
+      music.setPour(pouring ? open : 0, spilling > 0);
     },
   };
 }
 
-// pouring: looping noise through a bandpass, the pitch rises as the glass fills
 function createPourSound() {
   let ctx, gain, filter;
   return {

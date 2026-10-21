@@ -1,20 +1,16 @@
 import * as THREE from 'three/webgpu';
 import { attribute, uniform, time, sin, mix, smoothstep, float, color } from 'three/tsl';
 
-// glass tube that fills with agave juice from the mill end (flow 0) to the still (flow 1)
 export const coilUniforms = {
   uFill: uniform(0), // 0 = empty, 1 = full
-  uFlow: uniform(0), // 0..1 how hard it's flowing right now (streaks)
+  uFlow: uniform(0),
 };
 const { uFill, uFlow } = coilUniforms;
 
-// place of each vertex along the tube: shortest distance over the surface (Dijkstra)
-// from the lowest point (the mill end). Works with any vertex order, so also with Draco.
 export function addFlowAttribute(geometry) {
   const pos = geometry.attributes.position;
   const count = pos.count;
 
-  // weld duplicated vertices (UV seams) so the tube is one connected surface
   const weld = new Int32Array(count);
   const ids = new Map();
   const pts = [];
@@ -44,7 +40,7 @@ export function addFlowAttribute(geometry) {
   for (let v = 1; v < n; v++) if (pts[v].y < pts[start].y) start = v;
 
   // Dijkstra with a small binary heap of [distance, vertex]
-  const dist = new Float64Array(n).fill(Infinity); // 64-bit like the heap values, Float32 rounding breaks the d > dist check
+  const dist = new Float64Array(n).fill(Infinity);
   dist[start] = 0;
   const heap = [[0, start]];
   const push = (item) => {
@@ -108,7 +104,6 @@ export function createCoilMaterial() {
   const streak = sin(flow.mul(300).sub(time.mul(12))).mul(0.5).add(0.5);
   const juice = color('#e8a040').mul(streak.mul(uFlow).mul(0.5).add(1));
 
-  // real glass where it's empty (transmission refracts what's behind), juice where it's filled
   const material = new THREE.MeshPhysicalNodeMaterial({
     metalness: 0, roughness: 0.04, ior: 1.5, thickness: 0.03, clearcoat: 1, clearcoatRoughness: 0.02,
   });

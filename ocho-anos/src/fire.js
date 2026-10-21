@@ -2,14 +2,12 @@ import * as THREE from 'three/webgpu';
 import gsap from 'gsap';
 import { music } from './music.js';
 
-const MIN_SIZE = 0.35; // flame size at the smallest (× the base size)
+const MIN_SIZE = 0.35;
 const MAX_SIZE = 2.3;  // flame size at the biggest
-const DRAG = 0.004;    // how much the size changes per pixel dragged
-const GLOW = 4;       // strength of the warm light the fire throws on the copper
-const FLAME_BASE = 0.21; // where the flame starts inside its plane (part of the plane height, from the bottom)
+const DRAG = 0.004;
+const GLOW = 4;
+const FLAME_BASE = 0.21;
 
-// the oven fire: click the oven to light it, then drag up/down to make it bigger or smaller.
-// base = { width, height, bottom, center } of the flame plane at size 1 (from main.js)
 export function createFire({ camera, controls, canvas, machine, scene, firePlane, flameUniforms, base }) {
   const oven = machine.getObjectByName('oven');
   if (!oven || !firePlane) {
@@ -21,9 +19,8 @@ export function createFire({ camera, controls, canvas, machine, scene, firePlane
   let lit = false;
   let target = 0.4; // size the user asks for, 0..1
   const planeScale = firePlane.scale.clone(); // scale at size 1
-  const baseY = base.bottom + base.height * 0.12; // the flame always starts here, just under the oven's rim
+  const baseY = base.bottom + base.height * 0.12;
 
-  // warm light from the fire onto the copper and the oven front
   const glow = new THREE.PointLight('#ff8a3d', 0, base.height * 2.5, 2);
   glow.position.set(base.center.x, base.bottom + base.height * 0.3, base.center.z);
   scene.add(glow);
@@ -115,7 +112,6 @@ export function createFire({ camera, controls, canvas, machine, scene, firePlane
       const heat = uHeat.value;
       const on = uOn.value;
 
-      // the plane grows with the fire; it's placed so the flame's base stays at baseY at every size
       const size = THREE.MathUtils.lerp(MIN_SIZE, MAX_SIZE, heat);
       const h = base.height * size;
       firePlane.visible = on > 0.001;
@@ -132,7 +128,6 @@ export function createFire({ camera, controls, canvas, machine, scene, firePlane
   };
 }
 
-// fire sound with Web Audio: a soft roar (filtered noise) plus random crackles; louder with a bigger fire
 function createFireSound() {
   let ctx, roarGain, noiseBuffer;
   let level = 0;
@@ -164,7 +159,7 @@ function createFireSound() {
 
   return {
     start() {
-      if (ctx) return ctx.resume(); // browsers only allow audio after a click
+      if (ctx) return ctx.resume();
       ctx = new AudioContext();
       noiseBuffer = makeNoise();
       const src = ctx.createBufferSource();

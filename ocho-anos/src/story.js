@@ -5,11 +5,8 @@ import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
 
-const HERO_SHIFT = 0.22; // how far the machine sits to the right in the header (part of the screen width)
+const HERO_SHIFT = 0.22;
 
-// parts = Blender names (without _01), dir = camera direction from the part, zoom = distance × part size
-// hint = instruction shown in the scene, pinned next to the object named in hintAt
-// photo/caption = photo on the right of the postcard (steps without one use the full width for the message)
 const CHAPTERS = [
   {
     kicker: 'El agave',
@@ -103,7 +100,7 @@ export function createStory({ camera, controls }) {
   let size = 1;
   let mode = 'intro';
   let index = 0;
-  const intro = { t: 0 }; // 0 = website header, 1 = arrived at the machine
+  const intro = { t: 0 };
 
   controls.enabled = false; // so the wheel scrolls the page
 
@@ -112,7 +109,6 @@ export function createStory({ camera, controls }) {
   gsap.from('.site-header', { y: -80, duration: 0.8, ease: 'power3.out' });
   gsap.from('.hero > *', { y: 40, opacity: 0, duration: 1, stagger: 0.12, delay: 0.2, ease: 'power3.out' });
 
-  // scrolling: the header turns into the story, the camera travels to the machine
   const tl = gsap.timeline({
     scrollTrigger: {
       trigger: el.intro,
@@ -150,7 +146,6 @@ export function createStory({ camera, controls }) {
   });
 
   // ---------- HINT IN THE SCENE ----------
-  // the instruction floats next to a 3D part: its top center is projected to the screen every frame
   let hintAnchor = null; // world position the hint points at
   const projected = new THREE.Vector3();
 
@@ -159,7 +154,6 @@ export function createStory({ camera, controls }) {
     hintAnchor = null;
     const obj = machine?.getObjectByName(objectName);
     if (!obj) return;
-    // only the object's own meshes (a multi-material object is a group with child objects in it)
     const meshes = obj.isMesh ? [obj] : obj.children.filter((c) => c.isMesh && c.userData.name === undefined);
     const box = new THREE.Box3();
     (meshes.length ? meshes : [obj]).forEach((m) => box.expandByObject(m));
@@ -179,7 +173,6 @@ export function createStory({ camera, controls }) {
     el.sceneHint.style.visibility = behind ? 'hidden' : 'visible'; // opacity does the fading (gsap)
   }
 
-  // feedback from an interaction during one step: new text, and it moves to the part it's about
   function stepHint(step, text, objectName) {
     if (mode !== 'story' || index !== step) return;
     setHint(text, objectName);
@@ -188,7 +181,6 @@ export function createStory({ camera, controls }) {
   const lastHint = (text, objectName) => stepHint(CHAPTERS.length - 1, text, objectName);
 
   window.addEventListener('fire-lit', () => stepHint(1, 'Drag up or down on the fire to make it bigger or smaller.', 'oven'));
-  // the filling line: start the machine → fill → pull for the next glass → … → toast
   window.addEventListener('machine-start', () => lastHint('The light is on, warming up…', 'machine_lever'));
   window.addEventListener('tap-full', () => lastHint('Full! Drag the tap handle back to close it.', 'tap'));
   window.addEventListener('tap-overflow', () => lastHint("It's overflowing! Close the tap!", 'tap'));
@@ -217,7 +209,7 @@ export function createStory({ camera, controls }) {
         window.scrollTo(0, 0);
       },
     });
-    gsap.killTweensOf(window); // stop a READ MORE scroll that's still running
+    gsap.killTweensOf(window);
     gsap.to(el.story, { autoAlpha: 1, duration: 0.6, delay: 0.4 });
     camera.clearViewOffset(); // the machine moves back to the middle
 
@@ -228,8 +220,6 @@ export function createStory({ camera, controls }) {
 
   let cardsShown = false;
 
-  // swap the postcards: a copy of the old pair slides away on top like a turned page,
-  // while the real cards (already showing the new step) settle in underneath
   function swapCards(fill, dir) {
     if (!cardsShown) {
       cardsShown = true;
@@ -263,7 +253,7 @@ export function createStory({ camera, controls }) {
 
   function goTo(i) {
     const nextIndex = THREE.MathUtils.clamp(i, 0, CHAPTERS.length - 1);
-    const dir = nextIndex >= index ? 1 : -1; // forward pages slide left, back slides right
+    const dir = nextIndex >= index ? 1 : -1;
     index = nextIndex;
     const ch = CHAPTERS[index];
 
@@ -282,7 +272,6 @@ export function createStory({ camera, controls }) {
       el.caption.textContent = ch.caption ?? '';
     }, dir);
 
-    // the hint appears next to its part once the camera has arrived
     if (ch.hint) {
       setHint(ch.hint, ch.hintAt);
       gsap.fromTo(el.sceneHint, { opacity: 0 }, { opacity: 1, duration: 0.5, delay: 1.2, overwrite: true });
@@ -307,7 +296,6 @@ export function createStory({ camera, controls }) {
     const box = new THREE.Box3();
     machine.traverse((obj) => {
       if (!obj.isMesh) return;
-      // meshes of a multi-material object are named after the mesh, the Blender name is on the parent
       const name = obj.userData.name !== undefined ? obj.name : obj.parent.name;
       if (ch.parts.includes(name.replace(/_\d+$/, ''))) box.expandByObject(obj);
     });
@@ -325,17 +313,15 @@ export function createStory({ camera, controls }) {
       const box = new THREE.Box3().setFromObject(object);
       box.getCenter(center);
       size = box.getSize(new THREE.Vector3()).length();
-      if (mode === 'story') goTo(index); // also places the hint, now that the parts exist
+      if (mode === 'story') goTo(index);
     },
 
-    // call every frame: during the intro the scroll drives the camera
     update() {
       if (mode === 'story') positionHint();
       if (mode !== 'intro' || !machine) return;
       const t = intro.t;
       const e = t * t * (3 - 2 * t); // smoothstep, eases in and out
 
-      // header: low front view like the render → scrolling: swing a little and move in
       const angle = THREE.MathUtils.lerp(0.18, -0.3, e);
       const dist = size * THREE.MathUtils.lerp(0.95, 0.72, e);
       const height = size * THREE.MathUtils.lerp(0.16, 0.38, e);
@@ -343,8 +329,6 @@ export function createStory({ camera, controls }) {
       controls.target.copy(center);
       camera.lookAt(center);
 
-      // shift the picture so the machine sits on the right, next to the hero text
-      // (no shift on narrow screens, the text sits over the scene there)
       const shift = (window.innerWidth > 800 ? HERO_SHIFT : 0) * (1 - e);
       const w = window.innerWidth, h = window.innerHeight;
       camera.setViewOffset(w, h, -shift * w, 0, w, h);

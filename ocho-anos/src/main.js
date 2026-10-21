@@ -19,9 +19,7 @@ import { music } from './music.js';
 
 // ---------- SCENE ----------
 const scene = new THREE.Scene();
-// sky, floor and reflections come from daynight.js (pastel sunset ↔ desert night)
 
-// needs the model: sand floor under it, sun aimed at it with a fitted shadow camera
 function buildGround() {
   const box = new THREE.Box3().setFromObject(machine);
   const size = box.getSize(new THREE.Vector3()).length();
@@ -65,7 +63,6 @@ controls.enableDamping = true;
 const story = createStory({ camera, controls });
 
 // ---------- LIGHTS ----------
-// where the sun comes from: lower y = lower sun = longer shadows and warmer side light (sunset)
 const SUN_DIRECTION = new THREE.Vector3(-4, 1.4, 4);
 const hemi = new THREE.HemisphereLight('#ffd9c2', '#3b3a2a', 1.2); // sky / ground
 scene.add(hemi);
@@ -80,37 +77,28 @@ rim.position.set(4, 4, -5);
 scene.add(rim);
 
 // ---------- DAY / NIGHT ----------
-// colors of the sky, floor, lights and reflections; the switch sits in the header
 const dayNight = createDayNight({ scene, renderer, hemi, sun, rim, toggle: document.querySelector('.mode-toggle') });
 
 // ---------- BLOOM ----------
-// the scene is rendered into a texture first; everything brighter than the threshold (neon, flame,
-// machine light, sun) gets blurred and added back on top, so it glows
 const pipeline = new THREE.RenderPipeline(renderer);
 const scenePass = pass(scene, camera);
 const sceneColor = scenePass.getTextureNode('output');
 const glow = bloom(sceneColor, 0.4, 0.3, 0.9); // strength, radius, threshold
 pipeline.outputNode = sceneColor.add(glow);
 
-// at night the neon shines brighter and the glow spreads more
 dayNight.onChange((t) => {
   neonGlow.value = THREE.MathUtils.lerp(1, 2.5, t);
   glow.strength.value = THREE.MathUtils.lerp(0.4, 0.9, t);
 });
-dayNight.setSunDirection(SUN_DIRECTION); // the background shader's light matches the sun light
-
+dayNight.setSunDirection(SUN_DIRECTION);
 
 const flameMaterial = createFlameMaterial({ flipY: false });
 const coilMaterial = createCoilMaterial();
-// bottle: plain light-brown tequila filling the whole liquid body
-// (opaque on purpose, so it shows through the transmissive bottle glass)
 const bottleTequila = new THREE.MeshPhysicalNodeMaterial({
   color: '#c8935a', roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.05,
   sheen: 0.3, sheenColor: '#ffd9a0', // a warm glow at the edges
 });
 
-// a Blender object with several materials loads as a Group of meshes,
-// this returns just those meshes (not the child objects parented to it)
 function ownMeshes(obj) {
   if (obj.isMesh) return [obj];
   return obj.children.filter((c) => c.isMesh && c.userData.name === undefined);
@@ -122,11 +110,10 @@ let machine;
 let firePlane;
 let shotMachine;
 let fire;
-let fireBase; // flame plane size/position at size 1, for fire.js
+let fireBase;
 let tap;
 let miniBelt;
 
-// the export uses Draco compression, the decoder lives in public/draco
 const dracoLoader = new DRACOLoader();
 dracoLoader.setDecoderPath('/draco/');
 
@@ -150,7 +137,6 @@ loader.load(
     // flame
     firePlane = machine.getObjectByName('fire_plane');
     if (firePlane) {
-      // always make 0..1 UVs from the bounds (exported ones are missing or atlas-sized)
       const geo = firePlane.geometry;
       geo.computeBoundingBox();
       const { min, max } = geo.boundingBox;
@@ -170,7 +156,7 @@ loader.load(
         const ovenCenter = ovenBox.getCenter(new THREE.Vector3());
         const width = ovenSize.x * 1.05;
         const height = ovenSize.y * 1.8;
-        const bottom = ovenBox.min.y + ovenSize.y * 0.7; // low enough to start inside, high enough that a small fire still peeks out
+        const bottom = ovenBox.min.y + ovenSize.y * 0.7;
         fireBase = { width, height, bottom, center: ovenCenter };
 
         firePlane.position.set(ovenCenter.x, bottom + height / 2, ovenCenter.z);
@@ -181,7 +167,7 @@ loader.load(
       }
 
       firePlane.material = flameMaterial;
-      firePlane.renderOrder = 1; // after the opaque scene, so the additive glow blends on top
+      firePlane.renderOrder = 1;
       console.log('✅ fire_plane found');
     } else {
       console.warn('❌ fire_plane NOT found, check the name in Blender');
@@ -203,11 +189,9 @@ loader.load(
       console.warn('❌ bottle_liquid NOT found, check the name in Blender');
     }
 
-    // tequila in the shot glasses: the same plain tequila as the bottle
     [1, 2, 3, 4].map((k) => machine.getObjectByName(`glass_liquid_0${k}`)).filter(Boolean)
       .forEach((m) => (m.material = bottleTequila));
 
-    // everything casts a shadow except the shader planes/volumes
     machine.traverse((obj) => {
       if (obj.isMesh) obj.castShadow = obj !== firePlane && obj !== bottleLiquid;
     });
@@ -219,7 +203,7 @@ loader.load(
     createTahonaDrag({
       camera, controls, canvas: renderer.domElement, machine,
       onGrind: (turned, amount) => {
-        miniBelt.run(amount); // piñas roll from the oven into the mill while grinding
+        miniBelt.run(amount);
         // about 10 full turns of the tahona fill the whole coil
         coilUniforms.uFill.value = Math.min(coilUniforms.uFill.value + turned * 0.016, 1);
         coilUniforms.uFlow.value = Math.max(coilUniforms.uFlow.value, amount);
@@ -296,7 +280,7 @@ const timer = new THREE.Timer();
 
 renderer.setAnimationLoop(() => {
   timer.update();
-  dayNight.update(); // bakes the desert shader once, refreshes reflections on day/night
+  dayNight.update();
   controls.update();
   story.update();
   const dt = timer.getDelta();
@@ -316,25 +300,16 @@ renderer.setAnimationLoop(() => {
   if (firePlane) {
     firePlane.rotation.y = Math.atan2(camera.position.x - firePlane.position.x, camera.position.z - firePlane.position.z);
   }
-  pipeline.render(); // scene + bloom (instead of renderer.render)
+  pipeline.render();
 });
 
 renderer.init().then(() => {
   console.log('WebGPU backend:', renderer.backend.isWebGPUBackend === true);
 });
 
-
-
 //import 'three/webgpu'
 
 //new WebGPURenderer()
 
-//navigator.gpu exists ?
-   //├─ yes → WebGPUBackend: requestAdapter → requestDevice → getContext('webgpu')
-   //└─ no  → WebGLBackend: getContext('webgl2')
-
 //renderer.render(scene, camera) every frame
 
-//backend: TSL → WGSL, buffers, pipeline, commands, submit()
-//
-//GPU draws → you see it on screen

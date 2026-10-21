@@ -1,14 +1,6 @@
-// Desert background: "Eroded sandstone hills" by jarble (https://www.shadertoy.com/view/fsK3Rt, 2021) — layered rock, sand on top,
-// soft shadows, fog, sun glow — ported to TSL. It runs live every frame as the scene background.
-//
-// Differences from the original:
-// - the ray direction comes from our three.js camera; the shader's own camera still flies slowly
-//   through the canyon (slower than the original), so the background keeps moving
-// - colors come from uniforms that blend between a pastel day and a Mexican night palette
-// - the sky gets a gradient (the original sky is one color plus the sun glow), stars at night
-// - the light direction follows the scene's sun
-// - the normal uses a fixed 8 octaves (the original picks 2–12 depending on distance)
-// - a small copy is rendered into a texture for the reflections on the copper and glass
+// Desert background: "Eroded sandstone hills" by jarble (https://www.shadertoy.com/view/fsK3Rt), ported to TSL
+// Changes: uses the three.js camera, slower fly-through, day/night colors, sky gradient and stars,
+// the light follows the scene's sun
 
 import * as THREE from 'three/webgpu';
 import {
@@ -17,18 +9,17 @@ import {
 } from 'three/tsl';
 
 // ---------- SETTINGS ----------
-const MAX_T = 28.0;          // ray length (original)
-const RAY_STEPS = 36;        // castRay steps (original)
-const SHADOW_STEPS = 22;     // shadow steps (original)
-const GEO_LOD = 4;           // terrain octaves for the ray (original geoLOD)
-const NOR_LOD = 8;           // terrain octaves for the normal (original: 2–12)
-const FLY_SPEED = 0.15;      // original: 0.5
+const MAX_T = 28.0;
+const RAY_STEPS = 36;
+const SHADOW_STEPS = 22;
+const GEO_LOD = 4;
+const NOR_LOD = 8;
+const FLY_SPEED = 0.15;
 const ENV_SIZE = [256, 128];
-const ENV_EVERY = 30;        // refresh the reflection texture every N frames (the canyon moves slowly)
-const SUN_HEIGHT = 0.2;      // how high the light is: 0 = on the horizon (sunset), 1 = straight up (original ≈ 0.5)
-const SUN_GLOW = 0.9;        // NEW: tight bright glow around the sun, on top of the original wide glow
+const ENV_EVERY = 30;
+const SUN_HEIGHT = 0.2;
+const SUN_GLOW = 0.9;
 
-// palette per mode (the original: blue-grey sky, red rock, yellow sand, warm white light)
 const PALETTES = {
   day: { // sunset
     skyLow: '#ff9a6b', skyHigh: '#8d6fc4', light: '#ffb07a',
@@ -64,8 +55,6 @@ const snoise = Fn(([p0]) => {
 // float noise(in vec2 uv)
 const noise = (p) => sin(p.x).add(cos(p.y));
 
-// float terrain(in vec2 uv, int octaves)
-// amplitude and freq only depend on the loop index, so the loop is unrolled here with plain numbers
 const terrainFns = {};
 function terrain(p, octaves) {
   terrainFns[octaves] ??= Fn(([uv0]) => {
@@ -86,10 +75,8 @@ function terrain(p, octaves) {
   return terrainFns[octaves](p);
 }
 
-// vec2 map(vec3 p, int octaves)   (only the distance is used, the material id is always "rock")
 const map = (p, octaves) => p.y.sub(terrain(p.xz, octaves));
 
-// vec2 castRay(vec3 ro, vec3 rd, int octaves)   → x = t, y = 1 when it hit the canyon
 const castRay = Fn(([ro, rd]) => {
   const prec = 0.001;
   const t = float(0).toVar();
@@ -112,7 +99,6 @@ const calcNormal = Fn(([p]) => {
   ));
 });
 
-// float shadows(vec3 ro, vec3 rd, float tMax, float k, int octaves)
 const shadows = Fn(([ro, rd]) => {
   const tMax = 8.0;
   const k = 12.0;
@@ -130,7 +116,6 @@ const shadows = Fn(([ro, rd]) => {
 // ---------- RENDER ----------
 // vec3 render(vec3 ro, vec3 rd)  (+ stars at night)
 const render = Fn(([rd]) => {
-  // camera: the original flies along x and sways in z, always 2.5 above the ground (slower here)
   const t1 = time.mul(FLY_SPEED / 0.5);
   const cXZ = vec2(t1.mul(0.5), sin(t1.mul(0.1)));
   const ro = vec3(cXZ.x, terrain(cXZ, 1).add(2.5), cXZ.y);
@@ -140,12 +125,10 @@ const render = Fn(([rd]) => {
   const lCol = P('light');
   const pos = ro.add(rd.mul(res.x));
 
-  // sky (NEW: a gradient instead of one color) + the original sun glow
   const sun = clamp(dot(rd, lPos), 0, 1);
   const skyColor = mix(P('skyLow'), P('skyHigh'), smoothstep(-0.05, 0.6, rd.y)).add(lCol.mul(sun.mul(sun)).mul(0.6)).toVar();
   skyColor.addAssign(lCol.mul(sun.pow(24)).mul(SUN_GLOW));
 
-  // stars at night (NEW)
   const cell = floor(rd.mul(220));
   const rand = fract(sin(dot(cell, vec3(12.9898, 78.233, 45.164))).mul(43758.5453));
   const twinkle = sin(time.mul(3).add(rand.mul(100))).mul(0.35).add(0.65);
@@ -181,11 +164,9 @@ const render = Fn(([rd]) => {
 
 // ---------- BACKGROUND + ENVIRONMENT ----------
 export function createDesert({ renderer, scene }) {
-  // live background: the background sphere's normal is the view direction
   scene.background = null;
   scene.backgroundNode = render(normalWorldGeometry);
 
-  // small copy for reflections: the same shader, one ray per pixel of a 360° panorama
   const envRT = new THREE.RenderTarget(ENV_SIZE[0], ENV_SIZE[1], { type: THREE.HalfFloatType });
   envRT.texture.mapping = THREE.EquirectangularReflectionMapping;
   envRT.texture.wrapS = THREE.RepeatWrapping;
@@ -204,7 +185,6 @@ export function createDesert({ renderer, scene }) {
   return {
     envMap: envRT.texture,
 
-    // the light comes from the scene's sun direction (kept above the horizon like the original)
     setSunDirection(v) {
       SUN.value.set(v.x, 0, v.z).normalize();
       SUN.value.y = SUN_HEIGHT;
@@ -217,7 +197,6 @@ export function createDesert({ renderer, scene }) {
       needsEnv = true;
     },
 
-    // call every frame, before rendering: refreshes the reflection texture now and then
     update() {
       frame++;
       if (!needsEnv && frame % ENV_EVERY !== 0) return;

@@ -3,10 +3,9 @@ import gsap from 'gsap';
 import { uniform, smoothstep, positionWorld, vec3, sin, length, float } from 'three/tsl';
 import { createDesert } from './desert.js';
 
-// colors per mode (sRGB hex) for the floor and the lights. Day = pastel sunset, night = Mexican desert night.
 // (the sky itself is the ported Shadertoy desert in desert.js)
 const PALETTES = {
-  day: { // sunset: low warm sun, less flat fill light, pink back light
+  day: {
     ground: '#eab095', // matches the sand of the desert shader
     hemiSky: '#ffc4a8', hemiGround: '#7a4a52', hemi: 0.8,
     sun: '#ff9450', sunIntensity: 2.6, rim: '#ff7ab0', rimIntensity: 1.2,
@@ -20,7 +19,6 @@ const PALETTES = {
   },
 };
 
-// day/night: desert sky (shader), sand floor, matching reflections and lights, and the toggle
 export function createDayNight({ scene, renderer, hemi, sun, rim, toggle }) {
   const day = toColors(PALETTES.day);
   const night = toColors(PALETTES.night);
@@ -38,7 +36,6 @@ export function createDayNight({ scene, renderer, hemi, sun, rim, toggle }) {
   let groundMesh = null;
   function addGround({ center, size, y: groundY }) {
     const material = new THREE.MeshStandardNodeMaterial({ roughness: 1, transparent: true });
-    // fade out far away, so the floor melts into the dunes of the desert shader behind it
     const dist = length(positionWorld.xz.sub(vec3(center).xz));
     const far = smoothstep(size * 0.6, size * 2.2, dist);
     const ripples = sin(positionWorld.x.mul(18).add(sin(positionWorld.z.mul(2)).mul(3))).mul(0.04).add(1); // dune ripples
@@ -87,7 +84,6 @@ export function createDayNight({ scene, renderer, hemi, sun, rim, toggle }) {
     }
   }
 
-  // start with the saved mode, or night if the computer is in dark mode
   let saved = null;
   try { saved = localStorage.getItem('rooster-mode'); } catch { /* ignore */ }
   const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
@@ -102,7 +98,6 @@ export function createDayNight({ scene, renderer, hemi, sun, rim, toggle }) {
     setSunDirection(v) {
       desert.setSunDirection(v);
     },
-    // call every frame before rendering (bakes the desert panoramas, refreshes reflections)
     update() {
       desert.update();
     },

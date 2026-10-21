@@ -1,8 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { music } from './music.js';
 
-// drag the tahona wheel around the mill: the arm swings around its origin (center of the basin)
-// and the wheel (child of the arm) rolls on its axle
 export function createTahonaDrag({ camera, controls, canvas, machine, onGrind }) {
   const arm = machine.getObjectByName('tahona_arm');
   const wheel = machine.getObjectByName('tahona_wheel');
@@ -11,9 +9,7 @@ export function createTahonaDrag({ camera, controls, canvas, machine, onGrind })
     return;
   }
 
-  // rolling without slipping: wheel turn = swing × arm length / wheel radius
   wheel.geometry.computeBoundingBox();
-  // both in the arm's space (the wheel can have its own scale in the export)
   const wheelRadius = wheel.geometry.boundingBox.max.y * wheel.scale.y;
   const rollRatio = wheel.position.length() / wheelRadius;
 
@@ -33,7 +29,7 @@ export function createTahonaDrag({ camera, controls, canvas, machine, onGrind })
   let audioCtx, gain, source, stillTimer;
 
   async function startSound() {
-    if (audioCtx) return audioCtx.resume(); // browsers only allow audio after a click
+    if (audioCtx) return audioCtx.resume();
     audioCtx = new AudioContext();
     gain = audioCtx.createGain();
     gain.gain.value = 0;
@@ -66,13 +62,11 @@ export function createTahonaDrag({ camera, controls, canvas, machine, onGrind })
     return raycaster.intersectObjects([arm, wheel], false).length > 0;
   }
 
-  // angle of the mouse around the pivot, on a flat plane at arm height
   function pointerAngle() {
     if (!raycaster.ray.intersectPlane(plane, hitPoint)) return null;
     return Math.atan2(-(hitPoint.z - pivot.z), hitPoint.x - pivot.x); // same direction as rotation.y
   }
 
-  // capture: runs before OrbitControls, so it doesn't start orbiting
   canvas.addEventListener('pointerdown', (e) => {
     setPointer(e);
     if (!hitsTahona()) return;
@@ -82,7 +76,7 @@ export function createTahonaDrag({ camera, controls, canvas, machine, onGrind })
     const angle = pointerAngle();
     if (angle === null) return;
 
-    e.stopImmediatePropagation(); // no orbiting, no flame heat while dragging
+    e.stopImmediatePropagation();
     dragging = true;
     lastAngle = angle;
     lastMoveTime = performance.now();
@@ -112,7 +106,6 @@ export function createTahonaDrag({ camera, controls, canvas, machine, onGrind })
     arm.rotation.y += delta;
     wheel.rotation.x -= delta * rollRatio; // flip the sign if it looks like sliding
 
-    // speed in radians/second → 0..1 grind (about half a turn per second = full)
     const now = performance.now();
     const speed = Math.abs(delta) / Math.max((now - lastMoveTime) / 1000, 0.001);
     lastMoveTime = now;
