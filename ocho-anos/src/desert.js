@@ -1,5 +1,5 @@
-// Desert background: a Shadertoy canyon shader (layered rock, sand on top, soft shadows, fog, sun glow)
-// ported to TSL. It runs live every frame as the scene background.
+// Desert background: "Eroded sandstone hills" by jarble (https://www.shadertoy.com/view/fsK3Rt, 2021) — layered rock, sand on top,
+// soft shadows, fog, sun glow — ported to TSL. It runs live every frame as the scene background.
 //
 // Differences from the original:
 // - the ray direction comes from our three.js camera; the shader's own camera still flies slowly
